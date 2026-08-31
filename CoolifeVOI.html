@@ -2048,7 +2048,13 @@ function trProcess(text) {
     userPrompt = text;
   }
 
-  callM(selTrans, [{role:'user',content:userPrompt}], sysPrompt)
+  var dstStarted=false;
+  callMStream(selTrans, [{role:'user',content:userPrompt}], sysPrompt, function(fullTxt){
+    var el=document.getElementById('trDstCur');
+    if(!el) return;
+    if(!dstStarted){ dstStarted=true; el.style.opacity='1'; el.style.color=''; el.innerHTML=''; }
+    el.textContent=fullTxt;
+  })
     .then(function(reply) {
       reply = reply.trim();
       var dst = document.getElementById('trDstCur');
@@ -2119,6 +2125,53 @@ function callM(model, messages, sysPrompt) {
   });
 }
 
+// 流式翻译调用：轻参数(temperature 0.2 / max_tokens 800) + SSE 流式输出，简单翻译显著提速
+function callMStream(model, messages, sysPrompt, onDelta) {
+  var c=cfg[model];
+  if(!c.key)return Promise.reject(new Error((MI[model]?MI[model].name:model)+' 未配置 API Key'));
+  var url=c.url.replace(/\/+$/,'')+'/chat/completions';
+  var msgs=sysPrompt?[{role:'system',content:sysPrompt}].concat(messages):messages;
+  return fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
+    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true}),
+    signal:abCtrl?abCtrl.signal:undefined
+  }).then(function(res){
+    if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
+    // 老浏览器无流式能力时回退非流式
+    if(!res.body||!res.body.getReader){
+      return res.json().then(function(data){
+        var full=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'（无响应）';
+        if(onDelta) onDelta(full);
+        return full;
+      });
+    }
+    var reader=res.body.getReader();
+    var decoder=new TextDecoder('utf-8');
+    var buf='', full='';
+    function pump(){
+      return reader.read().then(function(r){
+        if(r.done) return full;
+        buf+=decoder.decode(r.value,{stream:true});
+        var lines=buf.split('\n'); buf=lines.pop();
+        for(var i=0;i<lines.length;i++){
+          var line=lines[i].trim();
+          if(line.indexOf('data:')!==0) continue;
+          var data=line.slice(5).trim();
+          if(data==='[DONE]') continue;
+          try{
+            var j=JSON.parse(data);
+            var delta=j.choices&&j.choices[0]&&j.choices[0].delta&&j.choices[0].delta.content;
+            if(delta){ full+=delta; if(onDelta) onDelta(full); }
+          }catch(e){}
+        }
+        return pump();
+      });
+    }
+    return pump();
+  });
+}
+
 // ════ CONFIG ════
 function buildCfgModal(){
   var html='';
@@ -2168,5 +2221,8 @@ function toast(msg,type){
   c.appendChild(el); setTimeout(function(){el.remove();},3500);
 }
 </script>
+
+
 </body>
+
 </html>
