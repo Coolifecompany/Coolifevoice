@@ -830,7 +830,7 @@ var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
 var trAudioChunks = [];
 var trCount = 0;
-var whisperCfg = {key:'', url:'https://poloai.top/v1', model:'whisper-1'};
+var whisperCfg = {key:'', url:'https://polocn.580ai.net/v1', model:'whisper-1'};
 
 // ════ INIT ════
 loadCfg();
@@ -2206,7 +2206,7 @@ function saveCfg(){
   whisperCfg.model=((document.getElementById('ci-wh-m')||{}).value||'').trim();
   saveCfgLS(); closeCfg(); toast('✓ 配置已保存','ok');
 }
-function loadCfg(){try{var s=localStorage.getItem('cvo2_cfg');if(s){var p=JSON.parse(s);MODELS.forEach(function(k){if(p[k])Object.assign(cfg[k],p[k]);});if(p._whisper)Object.assign(whisperCfg,p._whisper);}}catch(e){}}
+function loadCfg(){try{var s=localStorage.getItem('cvo2_cfg');if(s){var p=JSON.parse(s);MODELS.forEach(function(k){if(p[k])Object.assign(cfg[k],p[k]);});if(p._whisper){Object.keys(p._whisper).forEach(function(k){if(p._whisper[k])whisperCfg[k]=p._whisper[k];});}}}catch(e){}}
 function saveCfgLS(){try{var d=JSON.parse(JSON.stringify(cfg));d._whisper=whisperCfg;localStorage.setItem('cvo2_cfg',JSON.stringify(d));}catch(e){}}
 
 // ════ UTILS ════
