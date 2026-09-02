@@ -437,6 +437,38 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
   .amc .amn{font-size:11px}
   .amc .amd{font-size:9px}
 }
+/* ── MOBILE: compact translation screen ── */
+@media(max-width:768px){
+  /* slimmer header on phones: save vertical space */
+  header{height:44px;padding:0 10px}
+  .logo{font-size:14px;gap:6px}
+  .lm{width:24px;height:24px;font-size:11px;border-radius:7px}
+  .hbadge{font-size:9px;padding:3px 7px}
+  main{margin-top:44px!important}
+  /* slim one-row translation bar: drop direction label + sub info, keep essentials */
+  .trbar{height:44px;padding:0 12px;gap:8px}
+  .trav{width:28px;height:28px;font-size:13px;border-radius:8px}
+  .trn{font-size:10px}
+  .trtag{font-size:8px;padding:1px 5px}
+  .trsub{display:none}
+  .tr-dir{display:none}
+  .rmr{gap:3px}
+  .rmb{min-width:auto;padding:4px 7px;display:inline-flex;flex-direction:row;align-items:center;gap:3px;border-radius:7px;font-size:9px}
+  .rmb .rmn{font-size:9px;display:inline}
+  .rmb .rmi{font-size:12px;display:inline;margin:0}
+  .pab{padding:5px 8px;font-size:10px}
+  /* input bar compact */
+  .ia{padding:7px 10px 8px}
+  .iw{min-height:38px;padding:3px}
+  .iw textarea{font-size:15px;padding:7px 6px}
+  .micb,.sbtn2,.stopb{width:32px;height:32px}
+  .im{font-size:9px;margin-top:3px}
+  /* bubbles compact */
+  .trmsgs{padding:11px;gap:12px}
+  .tr-src,.tr-dst{font-size:14px;max-width:92%}
+  /* hide the "0 条翻译" counter on very narrow screens to save a line */
+  #trCnt{display:none}
+}
 @media(min-width:769px){.bnav{display:none!important}.fab-voice{display:none!important}}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
