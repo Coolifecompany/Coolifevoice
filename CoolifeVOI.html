@@ -2352,7 +2352,42 @@ function toast(msg,type){
 }
 </script>
 
-
+<script>
+/* ════ REMOTE INPUT SYNC (LAN) ════ */
+(function(){
+  if (window.__remoteInited) return; window.__remoteInited = true;
+  var ws = null, queue = [], connected = false;
+  function connect(){
+    var proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var url = proto + location.host + '/ws';
+    try { ws = new WebSocket(url); } catch(e){ return; }
+    ws.onopen = function(){ connected = true; while(queue.length) ws.send(queue.shift()); };
+    ws.onclose = function(){ connected = false; setTimeout(connect, 2000); };
+    ws.onerror = function(){ try{ws.close();}catch(e){} };
+    ws.onmessage = function(ev){
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'input') {
+          // 自动切到对应模式并填入输入框
+          if (msg.mode === 'trans') {
+            try { window.selAppMode && selAppMode('trans'); } catch(e){}
+            try { window.startTrans && startTrans(); } catch(e){}
+            var ti = document.getElementById('trInput');
+            if (ti) { ti.value = msg.text || ''; ti.dispatchEvent(new Event('input')); ti.focus(); }
+            try { window.trProcess && trProcess(msg.text); } catch(e){}
+          } else {
+            try { window.selAppMode && selAppMode('1v1'); } catch(e){}
+            var ci = document.getElementById('ci');
+            if (ci) { ci.value = msg.text || ''; ci.dispatchEvent(new Event('input')); ci.focus(); }
+            try { window.sendChat && sendChat(); } catch(e){}
+          }
+        }
+      } catch(e) { console.error('remote msg err', e); }
+    };
+  }
+  connect();
+})();
+</script>
 </body>
 
 </html>
