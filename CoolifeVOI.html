@@ -1249,23 +1249,49 @@ function toggleVP() {
   if (!vpOn&&window.speechSynthesis) window.speechSynthesis.cancel();
   toast(vpOn?'语音播报已开启':'语音播报已关闭','ok');
 }
+// 语音播报（加固版：预加载语音 / resume 防 Chrome 暂停 / 失败可见反馈）
+var cachedVoices = [];
+function loadVoices(){
+  try{
+    cachedVoices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  }catch(e){ cachedVoices = []; }
+  return cachedVoices;
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = function(){ loadVoices(); };
+}
 function tts(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  // 只去掉文字排版标点，保留数学/技术符号（+ - = > < ( ) [ ] { } / \ ^ _ % ≈ ≠ ≤ ≥ ∞ ± × ÷ 等）
-  // 去除各种引号、书名号、方括号、逗号句号感叹号问号分号冒号、星号井号等
-  var clean = text
-    .replace(/[\u2018\u2019\u201c\u201d\u300c\u300d\u300e\u300f\u300a\u300b\u3008\u3009\u3010\u3011\u2032\u2033\u2103\u2122\u00a0\u2000-\u206F\u3000-\u303F\uff00-\uffef]/g,'')
-    .replace(/[，。！？、；：""''「」【】《》（）〈〉『』〔〕﹃﹄﹁﹂﹏﹋﹌﹪﹫﹠﹦﹢﹤﹥﹨﹩﹪﹫！＂＃＄％＆＇（）＊＋，－．／：；＜＝＞？＠［＼］＾＿｀｛｜｝～]/g,'')
-    .replace(/[.,!?;:"'*#@$~`&|…—·–]/g,' ')
-    .replace(/　/g,'')
-    .replace(/\s{2,}/g,' ').trim();
-  var lang = detectLang(text);
-  var utt=new SpeechSynthesisUtterance(clean);
-  utt.lang=lang; utt.rate=1.0; utt.pitch=1.0;
-  var voice = findVoice(lang);
-  if(voice) utt.voice=voice;
-  window.speechSynthesis.speak(utt);
+  try{
+    if (!window.speechSynthesis) { toast('当前浏览器不支持语音播报','er'); return; }
+    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.paused) { try{ window.speechSynthesis.resume(); }catch(e){} }
+    // 只去掉文字排版标点，保留数学/技术符号（+ - = > < ( ) [ ] { } / \ ^ _ % ≈ ≠ ≤ ≥ ∞ ± × ÷ 等）
+    // 去除各种引号、书名号、方括号、逗号句号感叹号问号分号冒号、星号井号等
+    var clean = text
+      .replace(/[\u2018\u2019\u201c\u201d\u300c\u300d\u300e\u300f\u300a\u300b\u3008\u3009\u3010\u3011\u2032\u2033\u2103\u2122\u00a0\u2000-\u206F\u3000-\u303F\uff00-\uffef]/g,'')
+      .replace(/[，。！？、；：""''「」【】《》（）〈〉『』〔〕﹃﹄﹁﹂﹏﹋﹌﹪﹫﹠﹦﹢﹤﹥﹨﹩﹪﹫！＂＃＄％＆＇（）＊＋，－．／：；＜＝＞？＠［＼］＾＿｀｛｜｝～]/g,'')
+      .replace(/[.,!?;:"'*#@$~`&|…—·–]/g,' ')
+      .replace(/　/g,'')
+      .replace(/\s{2,}/g,' ').trim();
+    if (!clean) { toast('没有可播报的文字','er'); return; }
+    var lang = detectLang(clean);
+    var utt=new SpeechSynthesisUtterance(clean);
+    utt.lang=lang; utt.rate=1.0; utt.pitch=1.0;
+    // 语音列表若为空，重新加载一次再取（移动端经典问题）
+    if (!cachedVoices.length) loadVoices();
+    var voice = findVoice(lang);
+    if (voice) utt.voice=voice;
+    utt.onerror=function(e){
+      console.error('TTS error:', e && e.error);
+      toast('播报失败：' + ((e&&e.error)||'未知错误'),'er');
+    };
+    window.speechSynthesis.speak(utt);
+    toast('🔊 正在播报…','ok');
+  }catch(err){
+    console.error('tts exception:', err);
+    toast('播报异常：'+err.message,'er');
+  }
 }
 
 // ════ MIC INPUT (text field) ════
