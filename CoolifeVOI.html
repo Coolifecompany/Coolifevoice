@@ -2408,13 +2408,22 @@ function viewMax(content, title){
   var o=document.getElementById('maxOverlay');
   if(!o){
     var d=document.createElement('div'); d.id='maxOverlay';
-    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><div style="display:flex;gap:6px;align-items:center"><button class="mdc" onclick="speakMax()" title="播报当前内容" style="font-size:14px;padding:3px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--tl);font-family:\'IBM Plex Mono\',monospace">🔊 播报</button><button class="mdc" onclick="closeMax()">✕</button></div></div><div class="maxbody" id="maxBody"></div></div>';
     document.body.appendChild(d); o=d;
   }
   o.style.display='flex';
+  o.setAttribute('data-content',content);
   document.getElementById('maxTitle').textContent=title||'内容';
   document.getElementById('maxBody').innerHTML='<div style="white-space:pre-wrap;word-break:break-word;line-height:1.8;font-size:15px;padding:4px 0">'+esc(content)+'</div>';
   var b=document.getElementById('maxBody'); if(b)b.scrollTop=0;
+}
+function speakMax(){
+  var o=document.getElementById('maxOverlay');
+  if(!o||o.style.display==='none')return;
+  var content=o.getAttribute('data-content')||'';
+  // 去 HTML 标签后播报纯文本
+  var text=content.replace(/<[^>]+>/g,' ').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim();
+  if(text) tts(text);
 }
 function closeMax(){
   var o=document.getElementById('maxOverlay');
