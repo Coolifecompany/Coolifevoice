@@ -1276,22 +1276,56 @@ function tts(text) {
       .replace(/\s{2,}/g,' ').trim();
     if (!clean) { toast('没有可播报的文字','er'); return; }
     var lang = detectLang(clean);
-    var utt=new SpeechSynthesisUtterance(clean);
-    utt.lang=lang; utt.rate=1.0; utt.pitch=1.0;
-    // 语音列表若为空，重新加载一次再取（移动端经典问题）
-    if (!cachedVoices.length) loadVoices();
-    var voice = findVoice(lang);
-    if (voice) utt.voice=voice;
-    utt.onerror=function(e){
-      console.error('TTS error:', e && e.error);
-      toast('播报失败：' + ((e&&e.error)||'未知错误'),'er');
-    };
-    window.speechSynthesis.speak(utt);
+    // 长文本分段播报（Chrome/移动端对单次长文本有静默截断 bug，分段串行最稳）
+    var chunks = splitForTTS(clean, 120);
+    speakChunks(chunks, lang);
     toast('🔊 正在播报…','ok');
   }catch(err){
     console.error('tts exception:', err);
     toast('播报异常：'+err.message,'er');
   }
+}
+// 按标点/长度拆分文本，避免单次 utterance 过长被浏览器静默截断
+// 注意：不用 lookbehind 正则（部分移动 WebView 不支持），用逐字符扫描
+function splitForTTS(text, maxLen){
+  var out=[];
+  var buf='';
+  for(var i=0;i<text.length;i++){
+    var c=text.charAt(i);
+    buf+=c;
+    var isPunct = c==='。'||c==='！'||c==='？'||c==='；'||c==='.'||c==='!'||c==='?'||c===';';
+    if((isPunct && buf.length>=20) || buf.length>=maxLen){
+      out.push(buf); buf='';
+    }
+  }
+  if(buf.trim()) out.push(buf);
+  return out.filter(function(s){return s && s.trim();});
+}
+// 串行播放分段
+var ttsChunkIdx=0;
+var ttsChunks=[];
+var ttsChunkLang='zh-CN';
+function speakChunks(chunks, lang){
+  ttsChunks=chunks; ttsChunkIdx=0; ttsChunkLang=lang;
+  if(!chunks.length){ toast('没有可播报的文字','er'); return; }
+  speakNextChunk();
+}
+function speakNextChunk(){
+  if(ttsChunkIdx >= ttsChunks.length){ toast('✅ 播报完成','ok'); return; }
+  var text=ttsChunks[ttsChunkIdx++];
+  var utt=new SpeechSynthesisUtterance(text);
+  utt.lang=ttsChunkLang; utt.rate=1.0; utt.pitch=1.0;
+  var voice=findVoice(ttsChunkLang);
+  if(voice) utt.voice=voice;
+  utt.onend=function(){ 
+    try{ if(ttsChunkIdx < ttsChunks.length){ speakNextChunk(); } else { toast('✅ 播报完成','ok'); } }catch(e){}
+  };
+  utt.onerror=function(e){
+    console.error('TTS chunk error:', e && e.error);
+    // 单段失败不中断，尝试下一段；全部失败才报错
+    try{ if(ttsChunkIdx < ttsChunks.length){ speakNextChunk(); } else { toast('播报中断：'+((e&&e.error)||'未知错误'),'er'); } }catch(e2){}
+  };
+  window.speechSynthesis.speak(utt);
 }
 
 // ════ MIC INPUT (text field) ════
