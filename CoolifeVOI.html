@@ -544,9 +544,21 @@ body.dmax #discSc .dms{flex:1;min-height:0}
       <div class="cbar"><div class="cbarf" id="stConF" style="width:0"></div></div>
     </div>
     <div class="sec">
-      <div class="sl"><span>API 配置</span><button class="cfgl" onclick="openCfg()">配置 →</button></div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--txm);line-height:1.6">输入各模型的<br>API Key · 地址 · 模型名</div>
-    </div>
+          <div class="sl"><span>API 配置</span><button class="cfgl" onclick="openCfg()">配置 →</button></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--txm);line-height:1.6">输入各模型的<br>API Key · 地址 · 模型名</div>
+        </div>
+        <!-- 讨论历史（保存的话题列表，点击回看，可多选删除） -->
+        <div class="sec" id="histSec">
+          <div class="sl">
+            <span>💾 讨论历史</span>
+            <button class="cfgl" id="histDelBtn" onclick="histSelectMode()" style="display:none">删除</button>
+          </div>
+          <div id="histList" style="max-height:220px;overflow-y:auto"></div>
+          <div id="histSelBar" style="display:none;margin-top:8px;display:none">
+            <button class="pab" onclick="histDeleteSelected()" style="font-size:10px;padding:4px 10px;color:var(--dg);border-color:rgba(255,107,138,.3)">🗑 删除选中</button>
+            <button class="pab" onclick="histSelectMode()" style="font-size:10px;padding:4px 10px">取消</button>
+          </div>
+        </div>
   </aside>
 
   <div class="main">
@@ -581,13 +593,16 @@ body.dmax #discSc .dms{flex:1;min-height:0}
           <div class="slbl">讨论话题</div>
           <textarea class="tinp" id="topicInp" rows="3" placeholder="例如：大语言模型是否真的具备推理能力？"></textarea>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-            <button class="pab" onclick="pickImgForTopic()" style="flex:1;justify-content:center">
-              🖼 上传图片 → 识别为话题
-            </button>
-            <button class="pab" onclick="newTopicBack()" style="flex:1;justify-content:center" title="结束当前讨论，开始新话题">
-              🔄 新话题
-            </button>
-          </div>
+                      <button class="pab" onclick="pickImgForTopic()" style="flex:1;justify-content:center">
+                        🖼 图片 → 话题
+                      </button>
+                      <button class="pab" onclick="pickFolder()" style="flex:1;justify-content:center" title="选一个文件夹，AI阅读所有文件后提炼讨论主题">
+                        📂 文件夹 → 讨论
+                      </button>
+                      <button class="pab" onclick="newTopicBack()" style="flex:1;justify-content:center" title="结束当前讨论，开始新话题">
+                        🔄 新话题
+                      </button>
+                    </div>
           <div class="slbl" style="margin-bottom:8px">运行模式</div>
           <div class="rmr">
             <div class="rmb active" id="rmM" onclick="selRunMode('manual')">
@@ -932,6 +947,7 @@ loadCfg();
 buildSetupGrids();
 buildSidebar();
 buildCfgModal();
+renderHistList();
 
 // ════ SETUP ════
 function buildSetupGrids() {
@@ -2056,6 +2072,135 @@ function addDiscImgMsg(text,dataUrl){
   lastHost=null;
 }
 
+// ════ FOLDER → DISCUSSION ════
+// 用户给一个文件夹路径（电脑/手机选文件夹），程序读取里面所有可读文件，
+// 两个 AI 各自阅读提炼观点，GPT 汇总成统一讨论主题，然后开始讨论。
+var _folderInput=null;
+function pickFolder(){
+  var inp=_folderInput;
+  if(!inp){
+    inp=document.createElement('input');
+    inp.type='file'; inp.webkitdirectory=true; inp.multiple=true; inp.style.display='none';
+    document.body.appendChild(inp); _folderInput=inp;
+  }
+  inp.onchange=function(){
+    var files=Array.prototype.slice.call(inp.files||[]);
+    inp.value='';
+    if(!files.length){toast('未选择文件夹','er');return;}
+    readFolderFiles(files);
+  };
+  inp.click();
+}
+// 读取文件夹里的可读文件（文本类直接读，图片收集，二进制文档给 AI 处理）
+function readFolderFiles(files){
+  var textFiles=[], imgs=[], others=[];
+  var TEXTE=/\.(txt|md|markdown|json|csv|html|htm|xml|log|py|js|ts|java|c|cpp|h|yaml|yml|toml|ini|conf|sh|bat|sql|css|scss|less|tsx|jsx)$/i;
+  files.forEach(function(f){
+    var n=(f.name||'').toLowerCase();
+    if(/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(n))imgs.push(f);
+    else if(TEXTE.test(n))textFiles.push(f);
+    else others.push(f);  // pdf/docx/xlsx 等二进制文档
+  });
+  if(!textFiles.length&&!imgs.length&&!others.length){toast('文件夹内无可读文件','er');return;}
+  toast('📂 读取 '+files.length+' 个文件（文本 '+textFiles.length+' · 图片 '+imgs.length+' · 文档 '+others.length+'）','ok');
+  // 逐文件读取文本内容
+  var contents=[];
+  var chain=Promise.resolve();
+  textFiles.forEach(function(f){
+    chain=chain.then(function(){return new Promise(function(res){
+      var rd=new FileReader();
+      rd.onload=function(){
+        var txt=String(rd.result||'').slice(0,60000);  // 每文件限 60KB
+        contents.push('【文件：'+f.name+'】\n'+(txt.trim()||'(空)')+'\n');
+        res();
+      };
+      rd.onerror=function(){contents.push('【文件：'+f.name+'】（读取失败）\n');res();};
+      rd.readAsText(f,'utf-8');
+    });});
+  });
+  chain.then(function(){
+    if(imgs.length){
+      contents.push('【图片文件】'+imgs.map(function(f){return f.name;}).join('、')+'（共'+imgs.length+'张，交由视觉AI读取）');
+    }
+    if(others.length){
+      contents.push('【其他文档】'+others.map(function(f){return f.name;}).join('、')+'（共'+others.length+'个，如docx/pdf/xlsx需专门的解析AI读取）');
+    }
+    var full=contents.join('\n\n');
+    folderToTopic(full, imgs, others);
+  });
+}
+// 两个 AI 阅读提炼观点 → GPT 汇总统一主题 → 开始讨论
+function folderToTopic(fullText, imgs, others){
+  if(!fullText.trim()){toast('未读取到文件内容','er');return;}
+  var sel=Object.keys(selMulti).filter(function(k){return selMulti[k]&&cfg[k].key;});
+  if(sel.length<2){toast('多AI讨论需至少2个已选模型','er');return;}
+  // 选两个"有阅读能力"的 AI 作为初始观点提出者（gpt 优先，其次 gemini）
+  var readers=[];
+  ['gpt','gemini','deepseek','opus'].forEach(function(m){ if(sel.indexOf(m)>=0&&readers.length<2)readers.push(m); });
+  if(readers.length<2)readers=sel.slice(0,2);
+  var reader1=readers[0], reader2=readers[1];
+  // 文本内容
+  var textPart=fullText.length>50000?fullText.slice(0,50000)+'\n…(截断)':fullText;
+  var hostMsg='📂 已读取文件夹内容，正在让 '+MI[reader1].name+' 和 '+MI[reader2].name+' 分别阅读并提炼讨论主题…';
+  showSc('disc');
+  document.getElementById('guestTp').textContent='读取文件夹讨论';
+  document.getElementById('hbadge').textContent='多AI讨论';
+  document.getElementById('hbadge').className='hbadge tl';
+  addHostMsg(hostMsg);
+  dTopic='文件夹内容讨论'; dStop=false; dRun=true; dAuto=runMode==='auto';
+  dRnd=0; dTrn=0; dLog=[]; dCons=0; dHigh=0; finalRpt='';
+  setCtrl(true); abCtrl=new AbortController();
+  var sys1='你是'+MI[reader1].name+'（'+MI[reader1].role+'）。请阅读下面的文档/文件夹内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。';
+  var sys2='你是'+MI[reader2].name+'（'+MI[reader2].role+'）。请阅读下面的文档/文件夹内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。请尽量与另一位AI的角度不同，提出不同的讨论主题。';
+  var p1='文件夹内容：\n\n'+textPart+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
+  var p2='文件夹内容：\n\n'+textPart+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
+  // reader1 阅读并给主题
+  callM(reader1,[{role:'user',content:p1}],sys1).then(function(r1){
+    var d1=addFolderMsg(reader1,r1);
+    dLog.push({role:'guest',model:reader1,action:'文档阅读',content:r1,round:dRnd});
+    // reader2 阅读并给主题
+    return callM(reader2,[{role:'user',content:p2}],sys2).then(function(r2){
+      var d2=addFolderMsg(reader2,r2);
+      dLog.push({role:'guest',model:reader2,action:'文档阅读',content:r2,round:dRnd});
+      // gpt 汇总两个主题 → 统一讨论主题
+      var pG='两位AI各自阅读了文件夹内容并提出了讨论主题：\n\n'
+        +'【'+MI[reader1].name+'】\n'+r1+'\n\n'
+        +'【'+MI[reader2].name+'】\n'+r2+'\n\n'
+        +'请综合两个主题，提炼出一个统一的讨论主题（一句话，精炼），并说明为什么这个主题值得讨论。只输出：\n【统一讨论主题】\n【理由】';
+      return callM('gpt',[{role:'user',content:pG}],'你是GPT-5.6，最高权限。综合两个AI的主题建议，提炼出一个最合适的统一讨论主题。').then(function(gt){
+        dTopic=gt.replace(/^【统一讨论主题】/,'').split('\n')[0].replace(/[【】]/g,'').trim().slice(0,80)||'文件夹内容讨论';
+        addFolderMsg('gpt',gt);
+        dLog.push({role:'img',model:'gpt',action:'主题汇总',content:gt,round:dRnd});
+        // 设定主导和评议：gpt 为主导（最高权限），其余参与 AI 评议
+        dGuest='gpt';
+        var all=sel;
+        dRevs=all.filter(function(m){return m!=='gpt';});
+        if(!dRevs.length)dRevs=all;
+        updGuestBar();
+        addHostMsg('🎯 统一讨论主题：「'+dTopic+'」\n👥 主导：'+MI[dGuest].name+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无'));
+        // 开始讨论
+        setCtrl(true);
+        setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },800);
+      });
+    });
+  }).catch(function(err){
+    if(err.name!=='AbortError'){addHostMsg('❌ 文档讨论失败：'+err.message);toast(err.message,'er');}
+    setCtrl(false); dRun=false;
+  });
+}
+// 文档阅读结果消息气泡（可全屏+可播报）
+function addFolderMsg(model,text){
+  var c=document.getElementById('discMsgs');
+  var info=MI[model];
+  var d=document.createElement('div'); d.className='mg2';
+  d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● 📄 '+info.name+' 文档阅读</span>'
+    +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 文档阅读\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
+    +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
+    +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
+  c.appendChild(d); scrollC(c); lastHost=null;
+  return d;
+}
+
 // ════ FULLSCREEN CONTENT OVERLAY ════
 function viewMax(content, title){
   var o=document.getElementById('maxOverlay');
@@ -2080,16 +2225,100 @@ function getHist(){try{var a=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');re
 function saveDiscHist(text){
   try{
     var h=getHist();
-    h.unshift({
+    // 保存完整讨论：报告 + 话题 + 参与模型 + 完整发言记录（dLog）
+    var entry={
+      id:'h'+Date.now()+Math.floor(Math.random()*1000),
       time:new Date().toLocaleString('zh-CN',{hour12:false}),
       topic:dTopic||'未命名话题',
       guest:MI[dGuest]?MI[dGuest].name:dGuest,
       rounds:dRnd, talks:dLog.length,
-      report:text
-    });
+      report:text||'',
+      models:Object.keys(selMulti).filter(function(k){return selMulti[k];}).map(function(k){return MI[k]?MI[k].name:k;}).join('、'),
+      log:(dLog||[]).map(function(e){
+        return {r:e.round, role:e.role, model:e.model, action:e.action, content:(e.content||'').slice(0,2000)};
+      })
+    };
+    h.unshift(entry);
     if(h.length>200)h=h.slice(0,200);
     localStorage.setItem(HIST_KEY,JSON.stringify(h));
+    renderHistList();
   }catch(e){}
+}
+// 侧边栏历史列表渲染
+var histSelecting=false;
+function renderHistList(){
+  var list=document.getElementById('histList');
+  var delBtn=document.getElementById('histDelBtn');
+  if(!list)return;
+  var h=getHist();
+  delBtn.style.display=h.length?'':'none';
+  if(!h.length){
+    list.innerHTML='<div style="color:var(--txm);font-size:10px;padding:6px 2px;text-align:center">暂无保存的讨论</div>';
+    return;
+  }
+  list.innerHTML=h.map(function(it,i){
+    var checked=histSelecting?'<input type="checkbox" class="histcb" data-i="'+i+'" style="margin-right:6px;accent-color:var(--ac)">':'';
+    var brief=(it.report||it.topic||'').replace(/\s+/g,' ').slice(0,40);
+    return '<div class="histitem" data-i="'+i+'" onclick="histOpen('+i+')" style="cursor:pointer;padding:7px 8px;border:1px solid var(--bd);border-radius:8px;margin-bottom:6px;background:var(--sf2);transition:background .15s">'
+      +'<div style="display:flex;align-items:center;gap:4px">'+checked
+      +'<span style="font-size:11px;font-weight:600;color:var(--tx);word-break:break-word;flex:1">'+esc(it.topic||'未命名')+'</span></div>'
+      +'<div style="font-size:9px;color:var(--txm);margin-top:2px;word-break:break-word">'+esc(brief)+'</div>'
+      +'<div style="font-size:9px;color:var(--txm);margin-top:2px">🕒 '+it.time+' · '+(it.guest||'')+' · '+it.rounds+'轮</div>'
+      +'</div>';
+  }).join('');
+}
+function histOpen(i){
+  if(histSelecting){
+    var cb=document.querySelector('.histcb[data-i="'+i+'"]');
+    if(cb)cb.checked=!cb.checked;
+    return;
+  }
+  var h=getHist(); var it=h[i];
+  if(!it)return;
+  // 回看完整讨论：报告 + 发言记录
+  var html='<div style="padding:0 2px">';
+  html+='<div style="font-size:13px;font-weight:700;margin-bottom:4px">🎯 '+esc(it.topic||'未命名')+'</div>';
+  html+='<div style="font-size:10px;color:var(--txm);margin-bottom:10px">🕒 '+it.time+' · 主导 '+esc(it.guest||'—')+' · '+it.rounds+'轮 · '+it.talks+'条 · 参与 '+esc(it.models||'—')+'</div>';
+  if(it.report){
+    html+='<div class="mdst" style="margin-top:8px">最终报告</div>';
+    html+='<div style="font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:12px">'+esc(it.report)+'</div>';
+  }
+  if(it.log&&it.log.length){
+    html+='<div class="mdst">讨论过程</div>';
+    html+=it.log.map(function(e){
+      var n=MI[e.model]?MI[e.model].name:e.model;
+      var tag=e.role==='guest'?'嘉宾':(e.role==='img'?'📷 插图':(e.role==='reviewer'?'评议':''));
+      return '<div style="border-left:2px solid var(--bd);padding:2px 0 2px 8px;margin:5px 0">'
+        +'<div style="font-size:9px;color:var(--txm)">第'+e.r+'轮 · '+(tag||'')+' '+esc(n)+' · '+esc(e.action||'')+'</div>'
+        +'<div style="font-size:11px;color:var(--tx);line-height:1.6;white-space:pre-wrap;word-break:break-word">'+esc(e.content||'')+'</div>'
+        +'</div>';
+    }).join('');
+  }
+  html+='</div>';
+  document.getElementById('histBody').innerHTML=html;
+  document.getElementById('histMo').classList.add('open');
+}
+// 单选/多选删除模式
+function histSelectMode(){
+  histSelecting=!histSelecting;
+  var bar=document.getElementById('histSelBar');
+  var delBtn=document.getElementById('histDelBtn');
+  delBtn.textContent=histSelecting?'取消':'删除';
+  bar.style.display=histSelecting?'flex':'none';
+  renderHistList();
+}
+function histDeleteSelected(){
+  var cbs=document.querySelectorAll('.histcb:checked');
+  if(!cbs.length){toast('请先勾选要删除的话题','er');return;}
+  var idxs=Array.prototype.map.call(cbs,function(cb){return parseInt(cb.getAttribute('data-i'),10);});
+  var h=getHist();
+  var keep=h.filter(function(it,i){return idxs.indexOf(i)<0;});
+  try{localStorage.setItem(HIST_KEY,JSON.stringify(keep));}catch(e){}
+  histSelecting=false;
+  document.getElementById('histSelBar').style.display='none';
+  document.getElementById('histDelBtn').textContent='删除';
+  renderHistList();
+  toast('已删除 '+idxs.length+' 条讨论','ok');
 }
 function openHist(){
   var h=getHist();
@@ -2104,9 +2333,9 @@ function openHist(){
         +'<div style="font-size:10px;color:var(--acb)">'+it.guest+' · '+it.rounds+'轮 · '+it.talks+'条</div>'
         +'</div>'
         +'<div style="font-size:13px;font-weight:600;margin:6px 0 2px;word-break:break-word">'+esc(it.topic)+'</div>'
-        +'<div style="font-size:11px;color:var(--txd);max-height:44px;overflow:hidden;word-break:break-word">'+esc(it.report.slice(0,120))+(it.report.length>120?'…':'')+'</div>'
+        +'<div style="font-size:11px;color:var(--txd);max-height:44px;overflow:hidden;word-break:break-word">'+esc((it.report||'').slice(0,120))+'</div>'
         +'<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
-        +'<button class="pab" onclick="viewMax(histAt('+i+').report,\'历史报告\')" style="font-size:10px;padding:4px 10px">📖 查看</button>'
+        +'<button class="pab" onclick="histOpen('+i+')" style="font-size:10px;padding:4px 10px">📖 回看</button>'
         +'<button class="pab" onclick="histDel('+i+')" style="font-size:10px;padding:4px 10px;color:var(--dg);border-color:rgba(255,107,138,.3)">🗑 删除</button>'
         +'</div></div>';
     }).join('');
@@ -2117,13 +2346,14 @@ function histAt(i){var h=getHist();return h[i]||{report:''};}
 function histDel(i){
   var h=getHist(); if(i>=0&&i<h.length)h.splice(i,1);
   try{localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
-  openHist();
+  renderHistList();
+  if(document.getElementById('histMo').classList.contains('open'))openHist();
 }
 function closeHist(){document.getElementById('histMo').classList.remove('open');}
 function clearHist(){
   if(!confirm('确定清空全部讨论历史？'))return;
   try{localStorage.removeItem(HIST_KEY);}catch(e){}
-  openHist(); toast('已清空历史','ok');
+  renderHistList(); openHist(); toast('已清空历史','ok');
 }
 
 // ════ DOWNLOAD REPORT (save to file) ════
