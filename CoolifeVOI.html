@@ -1848,6 +1848,9 @@ function discUserSay(){
   c.appendChild(d); scrollC(c);
   // 写入 dLog，让所有 AI 都能看到用户的观点
   dLog.push({role:'user',model:'me',action:'发言',content:txt,round:dRnd});
+  // 消息元素绑定 dLog index，供编辑同步
+  d.dataset.dlogIdx=dLog.length-1;
+  var ubt=d.querySelector('.bt'); if(ubt)makeEditable(ubt, txt);
   addHostMsg('💬 你加入了讨论，AI 正在回应你的观点…');
   // 自动触发下一轮：所有 AI（嘉宾+评议）针对用户观点继续
   dStop=false;
@@ -1871,6 +1874,7 @@ function addDiscGuestMsg(model,text,followUp){
     +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
     +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
   c.appendChild(d); scrollC(c);
+  var bt=d.querySelector('.bt'); if(bt)makeEditable(bt);
 }
 var ACL={s:'补充',c:'质疑',o:'反对',r:'修正'};
 var ACC={s:'ab-s',c:'ab-c',o:'ab-o',r:'ab-r'};
@@ -1884,6 +1888,7 @@ function addDiscRevMsg(model,text,ac){
       +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
       +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
   c.appendChild(d); scrollC(c);
+  var bt=d.querySelector('.bt'); if(bt)makeEditable(bt);
 }
 var dThIdx=0;
 function addDiscThink(model,isGuest){
@@ -2145,8 +2150,9 @@ function discImgAnalyze(dataUrl){
       +'<div class="bt">'+esc(text)+'</div>'
       +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
     c.appendChild(d); scrollC(c);
-    lastHost=null;
-  }
+        var bt=d.querySelector('.bt'); if(bt)makeEditable(bt);
+        lastHost=null;
+      }
 
 // ════ FOLDER → DISCUSSION ════
 // 用户给一个文件夹路径（电脑/手机选文件夹），程序读取里面所有可读文件，
@@ -2379,8 +2385,9 @@ function addFolderMsg(model,text){
     +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
     +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
   c.appendChild(d); scrollC(c); lastHost=null;
-  return d;
-}
+    var bt=d.querySelector('.bt'); if(bt)makeEditable(bt);
+    return d;
+  }
 
 // ════ FULLSCREEN CONTENT OVERLAY ════
 function viewMax(content, title){
@@ -3060,6 +3067,75 @@ function scrollC(c){requestAnimationFrame(function(){if(c)c.scrollTop=c.scrollHe
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
 function escA(s){return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,' ');}
+// 消息文本编辑：点击文字弹出编辑框，修改后保存并同步 dLog
+function makeEditable(el, origText){
+  if(!el||el.dataset.editable==='1')return;
+  el.dataset.editable='1';
+  el.dataset.orig=origText||el.textContent;
+  el.title='点击编辑文字';
+  el.style.cursor='text';
+  el.addEventListener('click',function(e){
+    if(e.target!==el||el.dataset.editing==='1')return;
+    e.stopPropagation();
+    el.dataset.editing='1';
+    openEditModal(el);
+  });
+}
+function openEditModal(el){
+  var o=document.getElementById('maxOverlay');
+  if(!o){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">编辑文字</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); o=d;
+  }
+  document.getElementById('maxTitle').textContent='✏️ 编辑发言内容';
+  var body=document.getElementById('maxBody');
+  var cur=(el.dataset.orig||el.textContent).replace(/<br>/g,'\n');
+    // textarea 内不转换行，只转义 < & >
+    var te=String(cur).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    body.innerHTML='<textarea id="editTxt" style="width:100%;box-sizing:border-box;min-height:150px;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none">'+te+'</textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+    +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'<button class="pab pri" onclick="saveEditModal()" style="font-size:11px;padding:6px 14px">✅ 保存</button>'
+    +'</div>';
+  o.classList.add('open');
+  setTimeout(function(){var ta=document.getElementById('editTxt');if(ta){ta.focus();}},100);
+  // 保存最近编辑的元素引用
+  _editEl=el;
+}
+var _editEl=null;
+function saveEditModal(){
+  var ta=document.getElementById('editTxt');
+  var newText=ta?ta.value.trim():'';
+  if(!newText){toast('内容不能为空','er');return;}
+  var el=_editEl;
+  if(!el){closeMax();return;}
+  // 更新 dLog
+  var msgEl=el.closest('.mg2');
+  var matched=false;
+  if(msgEl&&msgEl.dataset.dlogIdx){
+    var idx=parseInt(msgEl.dataset.dlogIdx,10);
+    if(!isNaN(idx)&&idx>=0&&idx<dLog.length){ dLog[idx].content=newText; matched=true; }
+  }
+  if(!matched&&el.dataset.orig){
+    var orig=el.dataset.orig;
+    for(var i=0;i<dLog.length;i++){
+      if(dLog[i].content===orig){ dLog[i].content=newText; matched=true; break; }
+    }
+  }
+  // 更新显示
+  el.textContent=newText;
+  el.dataset.orig=newText;
+  // 同步播报按钮
+  if(msgEl){
+    var spb=msgEl.querySelector('.dspk .spkb[data-t]');
+    if(spb)spb.setAttribute('data-t',newText);
+  }
+  el.dataset.editing='0';
+  _editEl=null;
+  closeMax();
+  toast(matched?'已保存修改':'已更新显示','ok');
+}
 function toast(msg,type){
   var c=document.getElementById('tc');
   var el=document.createElement('div'); el.className='tos'+(type?' '+type:''); el.textContent=msg;
