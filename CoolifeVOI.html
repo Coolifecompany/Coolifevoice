@@ -356,6 +356,12 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 /* MODAL */
 .mo{position:fixed;inset:0;background:rgba(8,8,16,.8);backdrop-filter:blur(8px);z-index:200;display:none;align-items:center;justify-content:center}
 .mo.open{display:flex}
+/* fullscreen content overlay (tap a message/report → fullscreen view) */
+#maxOverlay{position:fixed;inset:0;z-index:300;display:none;flex-direction:column;background:var(--bg-g)}
+#maxOverlay .maxbox{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--bg-g)}
+#maxOverlay .maxhdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(20,20,38,.97);border-bottom:1px solid var(--bd);flex-shrink:0}
+#maxOverlay .maxt{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;letter-spacing:.06em}
+#maxOverlay .maxbody{flex:1;overflow-y:auto;padding:18px 20px;-webkit-overflow-scrolling:touch}
 .mod{background:rgba(26,26,46,.98);border:1px solid var(--bd2);border-radius:14px;padding:18px;width:480px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.5)}
 .mdt{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
 .mdc{background:none;border:none;color:var(--txd);cursor:pointer;font-size:18px;padding:4px;line-height:1}
@@ -568,6 +574,14 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
           <div class="mg" id="gMulti"></div>
           <div class="slbl">讨论话题</div>
           <textarea class="tinp" id="topicInp" rows="3" placeholder="例如：大语言模型是否真的具备推理能力？"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button class="pab" onclick="pickImgForTopic()" style="flex:1;justify-content:center">
+              🖼 上传图片 → 识别为话题
+            </button>
+            <button class="pab" onclick="newTopicBack()" style="flex:1;justify-content:center" title="结束当前讨论，开始新话题">
+              🔄 新话题
+            </button>
+          </div>
           <div class="slbl" style="margin-bottom:8px">运行模式</div>
           <div class="rmr">
             <div class="rmb active" id="rmM" onclick="selRunMode('manual')">
@@ -695,14 +709,29 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
         </div>
         <div id="sumBody"></div>
         <div class="suma">
-          <button class="sumab pri" onclick="backSetup()">开启新对话</button>
-          <button class="sumab" onclick="copyRpt()">复制报告</button>
-        </div>
+                  <button class="sumab pri" onclick="backSetup()">开启新对话</button>
+                  <button class="sumab" onclick="copyRpt()">复制报告</button>
+                  <button class="sumab" onclick="viewMax(finalRpt,'最终讨论报告')">📖 全屏阅读</button>
+                  <button class="sumab" onclick="dlRpt()">💾 保存文件</button>
+                  <button class="sumab" onclick="openHist()">📚 历史记录</button>
+                </div>
       </div>
     </div>
 
-    <!-- TRANSLATION -->
-    <div id="transSc">
+    <!-- HISTORY MODAL -->
+        <div class="mo" id="histMo">
+          <div class="mod" style="max-width:600px">
+            <div class="mdt">讨论历史记录<button class="mdc" onclick="closeHist()">✕</button></div>
+            <div id="histBody" style="max-height:60vh;overflow-y:auto;padding:10px 0"></div>
+            <div class="mda">
+              <button class="mdb dg" onclick="clearHist()">🗑 清空全部</button>
+              <button class="mdb pri" onclick="closeHist()">关闭</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- TRANSLATION -->
+        <div id="transSc">
       <div class="trbar">
         <div class="trav">🇹🇭</div>
         <div class="trinfo">
@@ -1491,8 +1520,8 @@ function startDisc() {
   var ms=Object.keys(selMulti).filter(function(k){return selMulti[k];});
   if(ms.length<2){toast('至少2个模型','er');return;}
   if(!cfg.gpt.key){toast('GPT 主持人需配置 API Key','er');return;}
-  var nonGpt=ms.filter(function(m){return m!=='gpt'&&cfg[m].key;});
-  if(!nonGpt.length){toast('至少一个非主持人模型需配置 API Key','er');return;}
+  var all=ms.filter(function(m){return cfg[m].key;});
+  if(all.length<2){toast('至少2个已配置模型','er');return;}
   dTopic=topic; dStop=false; dRun=true; dAuto=runMode==='auto';
   dRnd=0; dTrn=0; dLog=[]; dCons=0; dHigh=0; finalRpt='';
   showSc('disc');
@@ -1500,12 +1529,13 @@ function startDisc() {
   document.getElementById('hbadge').textContent='多AI讨论';
   document.getElementById('hbadge').className='hbadge tl';
   setCtrl(true); abCtrl=new AbortController();
-  addHostMsg('🔍 识别话题类型并指定嘉宾中…');
-  assignGuest(topic, nonGpt).then(function(g){
+  addHostMsg('🔍 识别话题类型并指定主导 AI 中…');
+  assignGuest(topic, all).then(function(g){
     dGuest=g;
-    dRevs=ms.filter(function(m){return m!=='gpt'&&m!==g&&cfg[m].key;});
+    // 所有其他已配置模型都参与评议；gpt 永远是最高权限（若 gpt 是嘉宾，则其余全部评议）
+    dRevs=all.filter(function(m){return m!==g;});
     updGuestBar(); rmLastHost();
-    addHostMsg('📢 话题：「'+topic+'」\n🎤 嘉宾：'+MI[dGuest].name+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无'));
+    addHostMsg('📢 话题：「'+topic+'」\n🎤 主导：'+MI[dGuest].name+(g==='gpt'?'（最高权限·GPT-5.6）':'')+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无'));
     return sleep(300);
   }).then(function(){return runRnd();})
   .catch(function(err){
@@ -1515,6 +1545,11 @@ function startDisc() {
 }
 
 function assignGuest(topic, cands) {
+  // 规则：除编程/架构类话题外，一律 gpt-5.6-sol 主导（最高权限）
+  var tl=topic.toLowerCase();
+  var isTech=/代码|编程|架构|算法|工程|bug|debug|开发|软件|program|code|architecture|algorithm/.test(tl);
+  if(!isTech&&cands.indexOf('gpt')>=0)return Promise.resolve('gpt');
+  if(isTech&&cands.indexOf('opus')>=0)return Promise.resolve('opus');
   var list=cands.map(function(m){return m+'('+MI[m].name+':'+MI[m].role+')';}).join('、');
   var p='话题:"'+topic+'",候选:'+list+'。只返回最合适的AI的key('+cands.join('/')+'），不要其他文字。';
   return callM('gpt',[{role:'user',content:p}]).then(function(raw){
@@ -1663,6 +1698,7 @@ function showFinalSum(text) {
   document.getElementById('sumBody').innerHTML=html;
   document.getElementById('sumMeta').textContent='嘉宾 '+MI[dGuest].name+' 整合 · '+dRnd+' 轮 · '+dLog.length+' 条发言';
   showSc('summary'); dRun=false;
+  saveDiscHist(text);
 }
 function parseFinal(text) {
   var parts=text.split(/\n\d+\.\s*/);
@@ -1693,7 +1729,8 @@ function addDiscGuestMsg(model,text,followUp){
   var info=MI[model];
   var d=document.createElement('div'); d.className='mg2';
   d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● '+info.name+'</span>'
-    +'<span class="gcr">'+(followUp?'嘉宾·回应':'嘉宾·首发')+'</span></div>'
+    +'<span class="gcr">'+(followUp?'嘉宾·回应':'嘉宾·首发')+'</span>'
+    +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 发言\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
     +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
     +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
   c.appendChild(d); scrollC(c);
@@ -1705,9 +1742,10 @@ function addDiscRevMsg(model,text,ac){
   var info=MI[model];
   var d=document.createElement('div'); d.className='mg2';
   d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● '+info.name+'</span>'
-    +'<span class="ab '+(ACC[ac]||'ab-s')+'">'+(ACL[ac]||ac)+'</span></div>'
-    +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
-    +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
+      +'<span class="ab '+(ACC[ac]||'ab-s')+'">'+(ACL[ac]||ac)+'</span>'
+      +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 评议\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
+      +'<div class="mb fm-'+model+'"><div class="bt">'+esc(text)+'</div>'
+      +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
   c.appendChild(d); scrollC(c);
 }
 var dThIdx=0;
@@ -1844,6 +1882,143 @@ function backSetup(){
 function copyRpt(){
   if(!finalRpt)return;
   navigator.clipboard.writeText(finalRpt).then(function(){toast('✓ 报告已复制','ok');}).catch(function(){toast('复制失败','er');});
+}
+
+// ════ IMAGE → TOPIC ════
+var _imgFileInput=null;
+function ensureImgInput(){
+  if(_imgFileInput)return _imgFileInput;
+  var i=document.createElement('input');
+  i.type='file'; i.accept='image/*'; i.style.display='none';
+  document.body.appendChild(i); _imgFileInput=i; return i;
+}
+function pickImgForTopic(){
+  var inp=ensureImgInput();
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0];
+    inp.value='';
+    if(!f){toast('未选择图片','er');return;}
+    var rd=new FileReader();
+    rd.onload=function(){ imgToTopic(rd.result); };
+    rd.readAsDataURL(f);
+  };
+  inp.click();
+}
+function imgToTopic(dataUrl){
+  toast('🖼 GPT 识别图片中…','ok');
+  var msg={role:'user',content:[
+    {type:'text',text:'请识别这张图片：1)图片里有什么内容/物体/文字 2)各元素之间的逻辑关系 3)用一段话总结图片表达的核心信息。最后给出一个适合作为多AI讨论话题的简短问题。' },
+    {type:'image_url',image_url:{url:dataUrl}}
+  ]};
+  callM('gpt',[msg],'你是图像识别专家 GPT-5.6。先详细描述图片内容，再总结，最后给出讨论话题。').then(function(txt){
+    var ti=document.getElementById('topicInp');
+    if(ti){
+      ti.value=txt; ti.focus(); ti.style.height='auto';
+    }
+    toast('✓ 识别完成，话题已填入','ok');
+  }).catch(function(err){
+    if(err.name!=='AbortError')toast('图片识别失败：'+err.message,'er');
+  });
+}
+
+// ════ NEW TOPIC (exit current discussion → new topic) ════
+function newTopicBack(){
+  if(dRun){dStop=true;dRun=false;}
+  if(abCtrl){try{abCtrl.abort();}catch(e){}abCtrl=null;}
+  if(window.speechSynthesis)window.speechSynthesis.cancel();
+  isProc=false; vcOn=false;
+  if(trRec){try{trRec.stop();}catch(e){}trRec=null;}
+  if(trMediaRec&&trMediaRec.state==='recording'){try{trMediaRec.stop();}catch(e){}}
+  trSt='idle';
+  showSc('setup'); buildSidebar();
+  var hb=document.getElementById('hbadge');
+  if(hb){hb.style.color=''; hb.style.borderColor='';}
+  var ti=document.getElementById('topicInp'); if(ti){ti.value='';ti.focus();}
+  toast('🔄 已回到新话题界面','ok');
+}
+
+// ════ FULLSCREEN CONTENT OVERLAY ════
+function viewMax(content, title){
+  var o=document.getElementById('maxOverlay');
+  if(!o){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); o=d;
+  }
+  o.style.display='flex';
+  document.getElementById('maxTitle').textContent=title||'内容';
+  document.getElementById('maxBody').innerHTML='<div style="white-space:pre-wrap;word-break:break-word;line-height:1.8;font-size:15px;padding:4px 0">'+esc(content)+'</div>';
+  var b=document.getElementById('maxBody'); if(b)b.scrollTop=0;
+}
+function closeMax(){
+  var o=document.getElementById('maxOverlay');
+  if(o)o.style.display='none';
+}
+
+// ════ DISCUSSION HISTORY (localStorage memory) ════
+var HIST_KEY='cvo2_disc_history';
+function getHist(){try{var a=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}}
+function saveDiscHist(text){
+  try{
+    var h=getHist();
+    h.unshift({
+      time:new Date().toLocaleString('zh-CN',{hour12:false}),
+      topic:dTopic||'未命名话题',
+      guest:MI[dGuest]?MI[dGuest].name:dGuest,
+      rounds:dRnd, talks:dLog.length,
+      report:text
+    });
+    if(h.length>200)h=h.slice(0,200);
+    localStorage.setItem(HIST_KEY,JSON.stringify(h));
+  }catch(e){}
+}
+function openHist(){
+  var h=getHist();
+  var b=document.getElementById('histBody');
+  if(!b)return;
+  if(!h.length){b.innerHTML='<div style="text-align:center;color:var(--txm);padding:30px 0;font-size:13px">暂无历史记录</div>';}
+  else{
+    b.innerHTML=h.map(function(it,i){
+      return '<div style="border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--sf2)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
+        +'<div style="font-size:11px;color:var(--txm)">🕒 '+it.time+'</div>'
+        +'<div style="font-size:10px;color:var(--acb)">'+it.guest+' · '+it.rounds+'轮 · '+it.talks+'条</div>'
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:600;margin:6px 0 2px;word-break:break-word">'+esc(it.topic)+'</div>'
+        +'<div style="font-size:11px;color:var(--txd);max-height:44px;overflow:hidden;word-break:break-word">'+esc(it.report.slice(0,120))+(it.report.length>120?'…':'')+'</div>'
+        +'<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">'
+        +'<button class="pab" onclick="viewMax(histAt('+i+').report,\'历史报告\')" style="font-size:10px;padding:4px 10px">📖 查看</button>'
+        +'<button class="pab" onclick="histDel('+i+')" style="font-size:10px;padding:4px 10px;color:var(--dg);border-color:rgba(255,107,138,.3)">🗑 删除</button>'
+        +'</div></div>';
+    }).join('');
+  }
+  document.getElementById('histMo').classList.add('open');
+}
+function histAt(i){var h=getHist();return h[i]||{report:''};}
+function histDel(i){
+  var h=getHist(); if(i>=0&&i<h.length)h.splice(i,1);
+  try{localStorage.setItem(HIST_KEY,JSON.stringify(h));}catch(e){}
+  openHist();
+}
+function closeHist(){document.getElementById('histMo').classList.remove('open');}
+function clearHist(){
+  if(!confirm('确定清空全部讨论历史？'))return;
+  try{localStorage.removeItem(HIST_KEY);}catch(e){}
+  openHist(); toast('已清空历史','ok');
+}
+
+// ════ DOWNLOAD REPORT (save to file) ════
+function dlRpt(){
+  if(!finalRpt){toast('暂无报告可保存','er');return;}
+  var topic=(dTopic||'讨论').replace(/[\\/:*?"<>|]/g,'_').slice(0,30);
+  var tpl='# 最终讨论报告\n\n话题：'+dTopic+'\n嘉宾：'+(MI[dGuest]?MI[dGuest].name:dGuest)+'\n轮次：'+dRnd+'\n发言：'+dLog.length+' 条\n时间：'+new Date().toLocaleString('zh-CN',{hour12:false})+'\n\n---\n\n'+finalRpt;
+  var blob=new Blob([tpl],{type:'text/plain;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='讨论报告_'+topic+'.md';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},100);
+  toast('✓ 报告已保存到下载目录','ok');
 }
 
 // ════ BOTTOM NAV ════
