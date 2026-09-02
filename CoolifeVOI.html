@@ -742,6 +742,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
               <button class="cbt2" id="ctSay" onclick="discUserToggle()" title="输入你的观点，插入到讨论中让所有 AI 回应"><span class="ci">💬</span><span>发言</span></button>
               <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
               <button class="cbt2" id="ctFile" onclick="discInsertFolder()" title="扫描文件夹，勾选文件后GPT读取并结合当前话题继续讨论"><span class="ci">📄</span><span>读文件</span></button>
+              <button class="cbt2" id="ctPaper" onclick="paperModal()" title="按话题速查公开学术论文(OpenAlex/arXiv)，引用科学依据支撑讨论"><span class="ci">📚</span><span>论文</span></button>
               <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
               <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
               <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
@@ -970,7 +971,172 @@ var trAudioChunks = [];
 var trCount = 0;
 var whisperCfg = {key:'sk-dD8g5UM7d8CktwK9lF4KoFDS6srFCpEzzip108kIa3NaE6gf', url:'https://polocn.580ai.net/v1', model:'whisper-1'};
 
-// ════ INIT ════
+// ════ PAPER SEARCH (公开学术 API 速查) ════
+// 自动按讨论话题检索论文，读取标题/作者/年份/摘要作为科学依据
+var paperCache = {};      // 话题 → 论文结果缓存（避免重复请求）
+var paperData = null;     // 当前选中的论文数据
+
+function paperModal(){
+  var t=document.getElementById('topicInp').value.trim() || dTopic || '大语言模型';
+  var o=document.getElementById('maxOverlay');
+  if(!o){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); o=d;
+  }
+  document.getElementById('maxTitle').textContent='📚 论文速查 · 科学依据';
+  document.getElementById('maxBody').innerHTML=buildPaperHtml(t);
+  o.classList.add('open');
+  setTimeout(function(){var q=document.getElementById('paperQ');if(q)q.focus();},100);
+}
+
+function buildPaperHtml(t){
+  return '<div class="pf">'
+    +'<div class="prow" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'
+    +'<input class="tinp" id="paperQ" value="'+escA(t)+'" placeholder="输入检索关键词/话题…" style="flex:1;min-width:0" onkeydown="if(event.key===\'Enter\')paperSearch()">'
+    +'<button class="sbtn2" onclick="paperSearch()" style="white-space:nowrap">🔍 检索</button>'
+    +'</div>'
+    +'<div id="paperBody" style="max-height:340px;overflow-y:auto;font-size:13px;line-height:1.7">'
+    +'<div style="color:var(--txm);padding:20px 0;text-align:center">输入话题后点击"检索"，自动从 OpenAlex / arXiv 公开学术 API 获取论文。</div>'
+    +'</div>'
+    +'</div>';
+}
+
+function paperSearch(){
+  var q=document.getElementById('paperQ').value.trim();
+  if(!q){toast('请输入检索词','er');return;}
+  var body=document.getElementById('paperBody');
+  body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">⏳ 正在检索公开学术库…</div>';
+  // 多源并行：OpenAlex 主查 + arXiv 补充
+  Promise.all([
+    paperSearchOpenAlex(q),
+    paperSearchArxiv(q)
+  ]).then(function(res){
+    var papers=[].concat(res[0], res[1]);
+    paperCache[q]=papers;
+    if(!papers.length){
+      body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">没有找到相关论文，换个关键词试试。</div>';
+      return;
+    }
+    paperData={q:q, papers:papers};
+    renderPaperList(body, papers);
+    toast('找到 '+papers.length+' 篇相关论文','ok');
+  }).catch(function(err){
+    console.error('paper search error:', err);
+    body.innerHTML='<div style="color:var(--ter);padding:20px 0;text-align:center">检索失败：'+esc(err.message)+'<br>（公开 API 可能需要网络连接，可重试）</div>';
+  });
+}
+
+// OpenAlex：开放学术库，免费无限制
+function paperSearchOpenAlex(q){
+  return fetch('https://api.openalex.org/works?search='+encodeURIComponent(q)+'&per-page=5&sort=relevance_score:desc')
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('OpenAlex HTTP '+r.status)); })
+    .then(function(d){
+      return (d.results||[]).map(function(w){
+        return {
+          title: w.title||'(无标题)',
+          authors: (w.authorships||[]).slice(0,4).map(function(a){return a.author&&a.author.display_name;}).filter(Boolean).join(', '),
+          year: w.publication_year||'',
+          venue: (w.primary_location&&w.primary_location.source&&w.primary_location.source.display_name)||'',
+          abstract: w.abstract_inverted_index ? invertAbstract(w.abstract_inverted_index) : '',
+          doi: w.doi||'',
+          url: w.doi||w.id||'',
+          src: 'OpenAlex'
+        };
+      });
+    });
+}
+
+// arXiv：预印本，物理学/数学/CS 等
+function paperSearchArxiv(q){
+  var url='https://export.arxiv.org/api/query?search_query=all:'+encodeURIComponent(q)+'&start=0&max_results=5&sortBy=relevance';
+  return fetch(url)
+    .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('arXiv HTTP '+r.status)); })
+    .then(function(xml){
+      var papers=[];
+      var entries=xml.match(/<entry>[\s\S]*?<\/entry>/g)||[];
+      entries.forEach(function(e){
+        var title=(e.match(/<title>([\s\S]*?)<\/title>/)||[])[1]||'';
+        var summary=(e.match(/<summary>([\s\S]*?)<\/summary>/)||[])[1]||'';
+        var published=(e.match(/<published>([\s\S]*?)<\/published>/)||[])[1]||'';
+        var authors=[];
+        var am=e.match(/<name>([\s\S]*?)<\/name>/g)||[];
+        am.slice(0,4).forEach(function(a){authors.push(a.replace(/<\/?name>/g,''));});
+        papers.push({
+          title: cleanXml(title),
+          authors: cleanXml(authors.join(', ')),
+          year: published.slice(0,4),
+          venue: 'arXiv',
+          abstract: cleanXml(summary),
+          doi: '',
+          url: (e.match(/<id>([\s\S]*?)<\/id>/)||[])[1]||'',
+          src: 'arXiv'
+        });
+      });
+      return papers;
+    });
+}
+
+function cleanXml(s){ return s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/\s+/g,' ').trim(); }
+function invertAbstract(inv){
+  if(!inv) return '';
+  var words=[];
+  Object.keys(inv).forEach(function(w){
+    inv[w].forEach(function(pos){ words.push([pos,w]); });
+  });
+  words.sort(function(a,b){return a[0]-b[0];});
+  return words.map(function(p){return p[1];}).join(' ').slice(0,800);
+}
+function renderPaperList(body, papers){
+  var html='';
+  papers.forEach(function(p,i){
+    html+='<div style="padding:10px 12px;border:1px solid var(--bd);border-radius:10px;margin-bottom:8px;background:var(--sf)">'
+      +'<div style="display:flex;gap:8px;align-items:flex-start">'
+      +'<input type="checkbox" class="pck" data-i="'+i+'" checked style="margin-top:3px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:600;font-size:13px;line-height:1.5">'+esc(p.title)+'</div>'
+      +'<div style="font-size:11px;color:var(--txm);margin-top:3px">'+esc(p.authors||'佚名')+' · '+(p.year||'')+' · '+esc(p.src)+(p.venue&&p.venue!=='arXiv'?' · '+esc(p.venue):'')+'</div>'
+      +(p.abstract?'<div style="font-size:12px;color:var(--txd);margin-top:6px;line-height:1.6;max-height:60px;overflow:hidden">'+esc(p.abstract)+'</div>':'')
+      +'</div></div></div>';
+  });
+  html+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
+    +'<button class="sbtn2" onclick="paperUse()" style="flex:1">📥 引用所选论文</button>'
+    +'<button class="sbtn2" onclick="paperUse(true)" style="flex:1">🧠 注入讨论（AI阅读后发言）</button>'
+    +'</div>';
+  body.innerHTML=html;
+}
+function paperSelected(){
+  var out=[];
+  var cbs=document.querySelectorAll('.pck');
+  cbs.forEach(function(cb){ if(cb.checked) out.push(paperData.papers[parseInt(cb.dataset.i,10)]); });
+  return out;
+}
+// 引用：把论文摘要写入讨论消息，作为用户观点插入
+function paperUse(inject){
+  var ps=paperSelected();
+  if(!ps.length){toast('请先勾选论文','er');return;}
+  var txt='📚 【论文速查 · 科学依据】\n'+(paperData?('检索话题：'+paperData.q+'\n'):'')
+    +ps.map(function(p,i){
+      return '【'+(i+1)+'】《'+p.title+'》\n  作者：'+p.authors+'\n  年份：'+p.year+' · 来源：'+p.src+'\n  摘要：'+(p.abstract||'无');
+    }).join('\n');
+  if(inject){
+    // 注入讨论上下文：作为"科学依据"加入 dLog，AI 看到后发言
+    dLog.push({role:'paper',model:'me',action:'论文依据',content:txt,round:dRnd});
+    addHostMsg('📚 已注入 '+ps.length+' 篇论文科学依据，AI 将基于此发言');
+    closeMax();
+        // 若讨论未在运行，触发一轮
+    if(!dRun){ runRnd(); }
+  } else {
+    // 作为用户发言插入，AI 直接回应
+    discUserTxtSet(txt); closeMax();
+  }
+}
+function discUserTxtSet(t){
+  var el=document.getElementById('discUserTxt');
+  if(el){ el.value=t; resize(el); }
+  var ui=document.getElementById('discUserInput');
+  if(ui) ui.style.display='flex';
+}
 loadCfg();
 buildSetupGrids();
 buildSidebar();
@@ -1784,6 +1950,7 @@ function buildCtx() {
     if(e.role==='guest')r='嘉宾'+n+'('+e.action+')';
     else if(e.role==='img')r='📷 用户插图·'+n+'识别';
     else if(e.role==='user')r='🧑 用户发言';
+    else if(e.role==='paper')r='📚 科学依据(论文)';
     else r='评议'+n+'('+e.action+')';
     return '【第'+e.round+'轮·'+r+'】\n'+e.content;
   }).join('\n\n---\n\n');
