@@ -42,9 +42,15 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 
 /* LAYOUT */
 .layout{display:flex;flex:1;margin-top:var(--hh);overflow:hidden}
-/* discussion fullscreen: hide sidebar for max reading space */
-.layout.dmax .sidebar{display:none}
-.layout.dmax #discSc{flex:1}
+/* discussion fullscreen: hide everything except messages */
+body.dmax header{display:none}
+body.dmax .sidebar{display:none}
+body.dmax .gbar{display:none}
+body.dmax .rpbar{display:none}
+body.dmax .cb{display:none}
+body.dmax .layout{margin-top:0;height:100vh}
+body.dmax #discSc{flex:1;display:flex;flex-direction:column}
+body.dmax #discSc .dms{flex:1;min-height:0}
 
 /* SIDEBAR */
 .sidebar{width:256px;flex-shrink:0;display:flex;flex-direction:column;border-right:1px solid var(--bd);background:var(--sf);overflow-y:auto;padding:14px}
@@ -694,6 +700,7 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
       <div class="dms" id="discMsgs"></div>
       <div class="cb">
         <button class="cbt2 pri" id="ctCont" onclick="contDisc()"><span class="ci">▶</span><span>继续</span></button>
+        <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
         <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
         <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
         <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
@@ -1638,7 +1645,10 @@ function parseAc(text) {
 function buildCtx() {
   return dLog.map(function(e){
     var n=MI[e.model]?MI[e.model].name:e.model;
-    var r=e.role==='guest'?'嘉宾'+n+'('+e.action+')':'评议'+n+'('+e.action+')';
+    var r;
+    if(e.role==='guest')r='嘉宾'+n+'('+e.action+')';
+    else if(e.role==='img')r='📷 用户插图·'+n+'识别';
+    else r='评议'+n+'('+e.action+')';
     return '【第'+e.round+'轮·'+r+'】\n'+e.content;
   }).join('\n\n---\n\n');
 }
@@ -1677,8 +1687,8 @@ function endDisc() {
   dStop=true; setCtrl(true);
   var tid=addDiscThink(dGuest,true);
   var ctx=buildCtx();
-  var p='话题："'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请输出最终总结（每项必填）：\n\n1. 本轮主问题：\n\n2. 我的初始立场：\n\n3. 收到的关键反对（来自哪个AI、第几轮）：\n\n4. 我采纳的修正：\n\n5. 当前共识：\n\n6. 保留分歧：\n\n7. 是否建议继续讨论：';
-  callM(dGuest,[{role:'user',content:p}],'你是'+MI[dGuest].name+'，嘉宾，整合所有反馈输出最终总结，必须吸收修正，不可仅复述初始立场。').then(function(reply){
+  var p='话题："'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请输出最终总结（每项必填，全部用纯文字表达，禁止输出代码块/JSON/表格标记，把任何结构化内容转述为自然语言）：\n\n1. 本轮主问题：\n\n2. 我的初始立场：\n\n3. 收到的关键反对（来自哪个AI、第几轮）：\n\n4. 我采纳的修正：\n\n5. 当前共识：\n\n6. 保留分歧：\n\n7. 是否建议继续讨论：';
+    callM(dGuest,[{role:'user',content:p}],'你是'+MI[dGuest].name+'，嘉宾，整合所有反馈输出最终总结，必须吸收修正，不可仅复述初始立场。只输出纯文字总结，不要输出 JSON 或代码。').then(function(reply){
     rmEl(tid); finalRpt=reply; showFinalSum(reply);
   }).catch(function(err){
     rmEl(tid); if(err.name!=='AbortError')toast('报告失败：'+err.message,'er');
@@ -1846,23 +1856,30 @@ function showSc(name){
 
 // 讨论最大化/恢复（隐藏侧边栏，内容全宽）
 function setDiscMax(on){
-  var lay=document.querySelector('.layout');
   var btn=document.getElementById('discMaxBtn');
   var lab=document.getElementById('discMaxLab');
-  if(!lay)return;
+  document.body.classList.toggle('dmax',on);
+  // 最大化时显示悬浮"退出全屏"按钮，恢复时隐藏
+  var ex=document.getElementById('discMaxExit');
   if(on){
-    lay.classList.add('dmax');
+    if(!ex){
+      ex=document.createElement('button'); ex.id='discMaxExit';
+      ex.textContent='✕ 退出全屏';
+      ex.style.cssText='position:fixed;top:12px;right:14px;z-index:999;padding:8px 16px;border-radius:20px;border:1px solid rgba(108,92,231,.6);background:rgba(26,26,46,.95);color:#fff;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4)';
+      ex.onclick=toggleDiscMax;
+      document.body.appendChild(ex);
+    }
+    ex.style.display='block';
     if(btn)btn.classList.add('von');
     if(lab)lab.textContent='恢复';
   }else{
-    lay.classList.remove('dmax');
+    if(ex)ex.style.display='none';
     if(btn)btn.classList.remove('von');
     if(lab)lab.textContent='最大化';
   }
 }
 function toggleDiscMax(){
-  var lay=document.querySelector('.layout');
-  setDiscMax(!lay.classList.contains('dmax'));
+  setDiscMax(!document.body.classList.contains('dmax'));
 }
 
 function backSetup(){
@@ -1935,6 +1952,71 @@ function newTopicBack(){
   if(hb){hb.style.color=''; hb.style.borderColor='';}
   var ti=document.getElementById('topicInp'); if(ti){ti.value='';ti.focus();}
   toast('🔄 已回到新话题界面','ok');
+}
+
+// ════ INSERT IMAGE INTO DISCUSSION ════
+// 讨论中插入图片：gpt-5.6-sol 结合当前话题识别图片，
+// 把识别结果整理成文字/JSON/代码注入讨论上下文，其他模型通过文字看到图片内容。
+function discInsertImg(){
+  var inp=ensureImgInput();
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0];
+    inp.value='';
+    if(!f){toast('未选择图片','er');return;}
+    var rd=new FileReader();
+    rd.onload=function(){ discImgAnalyze(rd.result); };
+    rd.readAsDataURL(f);
+  };
+  inp.click();
+}
+function discImgAnalyze(dataUrl){
+  if(!dTopic){toast('请先开始讨论','er');return;}
+  // 讨论区显示图片缩略图 + 识别中的提示
+  addHostMsg('📷 你插入了一张图片，GPT-5.6 正在结合当前话题识别…');
+  var c=document.getElementById('discMsgs');
+  var pv=document.createElement('div'); pv.className='mg2 imgpv';
+  pv.innerHTML='<img src="'+dataUrl+'" style="max-width:220px;max-height:160px;border-radius:10px;border:1px solid var(--bd)">';
+  c.appendChild(pv); scrollC(c);
+  // 结合当前话题 + 讨论记录，让 gpt 识别并整理
+  var ctx=buildCtx();
+  var prompt='当前讨论话题："'+dTopic+'"\n\n已有讨论记录：\n'+ctx+'\n\n'
+    +'现在用户插入了一张图片。请完成：\n'
+    +'1. 详细识别图片内容（物体/文字/结构/场景）\n'
+    +'2. 描述图中各元素之间的逻辑关系\n'
+    +'3. 结合当前讨论话题，说明这张图片对讨论的推进作用/新信息/新论点\n'
+    +'4. 如果适合，用 JSON 或代码形式结构化输出关键信息；否则用清晰文字\n'
+    +'输出格式要求：先输出图片识别结果，再输出"【讨论推进】"段落给出对话题的增量建议。';
+  var msg={role:'user',content:[
+    {type:'text',text:prompt},
+    {type:'image_url',image_url:{url:dataUrl}}
+  ]};
+  callM('gpt',[msg],'你是图像分析专家 GPT-5.6，负责把图片"翻译"成文字/JSON/代码供其他AI理解，并推动讨论。').then(function(txt){
+    // 清理缩略图提示，用正式消息替代
+    pv.remove();
+    // 以"图片分析（GPT-5.6）"消息写入讨论 + 注入 dLog 让所有 AI 可见
+    addDiscImgMsg(txt, dataUrl);
+    dLog.push({role:'img',model:'gpt',action:'图片识别',content:txt,round:dRnd});
+    addHostMsg('✅ 图片识别完成，已把图片内容整理进讨论，继续推进下一轮…');
+    // 自动触发下一轮，让所有 AI 针对图片内容继续讨论
+    if(!dRun){dRun=true;}
+    setCtrl(true);
+    setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },600);
+  }).catch(function(err){
+    pv.remove();
+    if(err.name!=='AbortError'){addHostMsg('⚠ 图片识别失败：'+err.message);toast('图片识别失败：'+err.message,'er');}
+  });
+}
+// 图片分析结果专用消息气泡（带小缩略图 + 可全屏 + 可播报）
+function addDiscImgMsg(text,dataUrl){
+  var c=document.getElementById('discMsgs');
+  var info=MI.gpt;
+  var d=document.createElement('div'); d.className='mg2';
+  d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● 📷 '+info.name+' 图片识别</span>'
+    +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 图片识别\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
+    +'<div class="mb fm-gpt"><div class="bt">'+esc(text)+'</div>'
+    +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
+  c.appendChild(d); scrollC(c);
+  lastHost=null;
 }
 
 // ════ FULLSCREEN CONTENT OVERLAY ════
