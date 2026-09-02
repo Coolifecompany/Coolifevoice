@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CoolifeVO — AI 智能助手</title>
+<title>CoolifeVO · 泰语→中文 翻译</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -499,327 +499,63 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 
 <header>
   <div class="logo"><div class="lm">⬡</div>COOLIF<span style="color:var(--acb)">EVO</span></div>
-  <span class="hbadge" id="hbadge">就绪</span>
-  <div class="hr">
-    <button class="hbtn" id="vplbtn" onclick="toggleVP()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
-      </svg>
-      <span id="vplab">语音播报</span>
-    </button>
-    <button class="hbtn" onclick="openCfg()">⚙ API 配置</button>
-  </div>
+  <span class="hbadge" id="hbadge" style="color:var(--dg)">泰语 → 中文</span>
 </header>
 
-<div class="layout">
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sec" id="sideMdSec">
-      <div class="sl"><span id="sideMdLabel">选择 AI</span><span id="sideSel" style="color:var(--acb);font-size:10px"></span></div>
-      <div id="sideMdList"></div>
+<main style="flex:1;display:flex;flex-direction:column;min-height:0;margin-top:var(--hh)">
+<!-- TRANSLATION -->
+<div id="transSc" style="display:flex;flex:1;min-height:0;flex-direction:column">
+  <div class="trbar">
+    <div class="trav">🇹🇭</div>
+    <div class="trinfo">
+      <div class="trn"><span>泰语 → 中文</span><span class="trtag" id="trEngine">—</span></div>
+      <div class="trsub" id="trSrLabel">Whisper API 语音识别</div>
     </div>
-    <div class="sec" id="sideStatSec" style="display:none">
-      <div class="sl">讨论状态</div>
-      <div class="stg">
-        <div class="str"><span class="stk">当前轮次</span><span class="stv" id="stRnd">—</span></div>
-        <div class="str"><span class="stk">发言次数</span><span class="stv" id="stTrn">0</span></div>
-        <div class="str"><span class="stk">共识度</span><span class="stv g" id="stCon">—</span></div>
-        <div class="str"><span class="stk">运行模式</span><span class="stv" id="stMod">手动</span></div>
+    <div class="tr-dir">
+      <span>ไทย</span><span class="tr-dir-arrow">→</span><span>中</span>
+    </div>
+    <div class="rmr" style="display:flex;gap:4px">
+      <div class="rmb" id="srBrowser" onclick="selSrMode('browser')">
+        <span class="rmi">🌐</span><span class="rmn">浏览器</span>
       </div>
-      <div class="cbar"><div class="cbarf" id="stConF" style="width:0"></div></div>
-    </div>
-    <div class="sec">
-      <div class="sl"><span>API 配置</span><button class="cfgl" onclick="openCfg()">配置 →</button></div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--txm);line-height:1.6">输入各模型的<br>API Key · 地址 · 模型名</div>
-    </div>
-  </aside>
-
-  <div class="main">
-    <!-- SETUP -->
-    <div id="setupSc">
-      <div class="si">
-        <div class="seye">CoolifeVO 多 AI 系统</div>
-        <div class="stit">选择你的对话方式</div>
-        <div class="ssub">1对1 深度对话 · 多AI嘉宾式讨论 · 中泰实时互译 — 均支持纯语音模式</div>
-        <div class="slbl">对话模式</div>
-        <div class="amr">
-          <div class="amc sel" id="am1v1" onclick="selAppMode('1v1')">
-            <span class="amic">🎙</span><span class="amn">1 对 1 对话</span>
-            <span class="amd">选一个 AI 深度聊天<br>纯语音免手操作</span>
-          </div>
-          <div class="amc" id="amMulti" onclick="selAppMode('multi')">
-            <span class="amic">🧑‍🤝‍🧑</span><span class="amn">多 AI 讨论</span>
-            <span class="amd">嘉宾主导 · 评议补充<br>阶段报告 · 自动收敛</span>
-          </div>
-          <div class="amc" id="amTrans" onclick="selAppMode('trans')">
-            <span class="amic">🇹🇭</span><span class="amn">中泰互译</span>
-            <span class="amd">说中文翻泰语<br>说泰语翻中文</span>
-          </div>
-        </div>
-        <div id="blk1v1">
-          <div class="slbl">选择你的 AI 伙伴</div>
-          <div class="mg" id="g1v1"></div>
-        </div>
-        <div id="blkMulti" style="display:none">
-          <div class="slbl">参与模型（含 GPT 主持人，选 2–4 个）</div>
-          <div class="mg" id="gMulti"></div>
-          <div class="slbl">讨论话题</div>
-          <textarea class="tinp" id="topicInp" rows="3" placeholder="例如：大语言模型是否真的具备推理能力？"></textarea>
-          <div class="slbl" style="margin-bottom:8px">运行模式</div>
-          <div class="rmr">
-            <div class="rmb active" id="rmM" onclick="selRunMode('manual')">
-              <span class="rmi">🎮</span><span class="rmn">手动控制</span><span class="rmd">每轮后等待用户决定</span>
-            </div>
-            <div class="rmb" id="rmA" onclick="selRunMode('auto')">
-              <span class="rmi">🤖</span><span class="rmn">自动收敛</span><span class="rmd">共识≥85% 自动停止</span>
-            </div>
-          </div>
-        </div>
-        <div id="blkTrans" style="display:none">
-          <div class="slbl">翻译引擎（选一个 AI 模型）</div>
-          <div class="mg" id="gTrans"></div>
-          <div class="slbl">语音识别方式</div>
-          <div class="rmr">
-                      <div class="rmb" id="srBrowser" onclick="selSrMode('browser')">
-                        <span class="rmi">🌐</span><span class="rmn">浏览器识别</span><span class="rmd">免配置 · Chrome/Edge</span>
-                      </div>
-                      <div class="rmb active tl" id="srWhisper" onclick="selSrMode('whisper')">
-                        <span class="rmi">🎧</span><span class="rmn">Whisper API</span><span class="rmd">泰语识别更精准</span>
-                      </div>
-                    </div>
-        </div>
-        <button class="stbtn" onclick="handleStart()">开始 →</button>
-        <div class="stnote">需配置 API Key · 1对1 至少 1 个模型 · 多AI至少 2 个 · 中泰互译选 1 个</div>
+      <div class="rmb active tl" id="srWhisper" onclick="selSrMode('whisper')">
+        <span class="rmi">🎧</span><span class="rmn">Whisper</span>
       </div>
     </div>
-
-    <!-- 1v1 CHAT -->
-    <div id="chatSc">
-      <div class="pbar">
-        <div class="pav" id="pav">?</div>
-        <div class="pi">
-          <div class="pn" id="pname">AI 伙伴</div>
-          <div class="pr" id="prole">—</div>
-        </div>
-        <div class="pacts">
-          <button class="pab von" onclick="openVC()" title="纯语音 — 全程免手操作">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-            纯语音
-          </button>
-          <button class="pab" onclick="clearChat()">清空</button>
-          <button class="pab back" onclick="backSetup()">← 返回</button>
-        </div>
-      </div>
-      <div class="msgs" id="chatMsgs">
-        <div class="emp" id="chatEmp">
-          <div class="emp-i">💬</div>
-          <div class="emp-t">开始对话</div>
-          <div class="emp-s">输入文字或点击「纯语音」<br>进入全程免手操作语音模式</div>
-        </div>
-      </div>
-      <div class="ia">
-        <div class="iw">
-          <button class="micb" id="micBtn" onclick="toggleMicInput()" title="语音输入">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
-          <textarea id="ci" placeholder="和 AI 说…" rows="1" onkeydown="onKey(event)" oninput="resize(this)"></textarea>
-          <button class="sbtn2" id="sendBtn" onclick="sendChat()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-          <button class="stopb" id="stopBtn" onclick="stopGen()" style="display:none">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          </button>
-        </div>
-        <div class="im">
-          <span id="iHint">Enter 发送 · Shift+Enter 换行</span>
-          <span id="turnCnt" style="color:var(--txm)">0 轮对话</span>
-        </div>
-      </div>
+    <button class="pab" onclick="clearTrans()">清空</button>
+  </div>
+  <div class="trmsgs" id="trMsgs">
+    <div class="tr-emp" id="trEmp">
+      <div class="emp-i">🇹🇭</div>
+      <div class="emp-t">泰语 → 中文 翻译</div>
+      <div class="emp-s" style="font-family:'IBM Plex Mono',monospace">输入泰语<br>自动翻译为中文</div>
     </div>
-
-    <!-- DISCUSSION -->
-    <div id="discSc">
-      <div class="gbar">
-        <div class="gav" id="guestAv">?</div>
-        <div class="ginfo">
-          <div class="gn"><span id="guestNm">嘉宾</span><span class="gtag">嘉宾</span></div>
-          <div class="gt" id="guestTp">话题加载中…</div>
-        </div>
-        <div class="rpill" id="rndPill">第 0 轮</div>
-        <button class="pab von" id="discVcBtn" onclick="openDiscVC()" title="纯语音参与讨论" style="margin-left:6px;white-space:nowrap;flex-shrink:0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-            <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-          语音
-        </button>
-      </div>
-      <div class="rpbar">
-        <span class="rpl">阶段报告</span>
-        <div class="rpd"><div class="rpdot" id="rp0"></div><div class="rpdot" id="rp1"></div><div class="rpdot" id="rp2"></div></div>
-        <span class="rpl" id="rpSub" style="margin-left:7px">每 3 轮触发</span>
-      </div>
-      <div class="dms" id="discMsgs"></div>
-      <div class="cb">
-        <button class="cbt2 pri" id="ctCont" onclick="contDisc()"><span class="ci">▶</span><span>继续</span></button>
-        <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
-        <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
-        <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
-      </div>
+  </div>
+  <div class="ia">
+    <div class="iw">
+      <button class="micb" id="trMicBtn" onclick="toggleTrMic()" title="语音输入">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <textarea id="trInput" placeholder="输入泰语…" rows="1" onkeydown="trOnKey(event)" oninput="trResize(this)"></textarea>
+      <button class="sbtn2" id="trSendBtn" onclick="sendTrans()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
     </div>
-
-    <!-- SUMMARY -->
-    <div id="sumSc">
-      <div class="sumi">
-        <div class="sumh">
-          <div class="sumico">◈</div>
-          <div><div class="sumt">最终讨论报告</div><div class="summ" id="sumMeta">由嘉宾 AI 整合输出</div></div>
-        </div>
-        <div id="sumBody"></div>
-        <div class="suma">
-          <button class="sumab pri" onclick="backSetup()">开启新对话</button>
-          <button class="sumab" onclick="copyRpt()">复制报告</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- TRANSLATION -->
-    <div id="transSc">
-      <div class="trbar">
-        <div class="trav">🇹🇭</div>
-        <div class="trinfo">
-          <div class="trn"><span>中泰互译</span><span class="trtag" id="trEngine">—</span></div>
-          <div class="trsub" id="trSrLabel">浏览器语音识别</div>
-        </div>
-        <div class="tr-dir">
-          <span>中</span><span class="tr-dir-arrow">⇄</span><span>ไทย</span>
-        </div>
-        <button class="pab" onclick="clearTrans()">清空</button>
-        <button class="pab back" onclick="backSetup()">← 返回</button>
-      </div>
-      <div class="trmsgs" id="trMsgs">
-        <div class="tr-emp" id="trEmp">
-          <div class="emp-i">🇹🇭</div>
-          <div class="emp-t">中泰实时互译</div>
-          <div class="emp-s" style="font-family:'IBM Plex Mono',monospace">输入文字或按麦克风说话<br>中文 → 泰语 · 泰语 → 中文</div>
-        </div>
-      </div>
-      <div class="ia">
-        <div class="iw">
-          <button class="micb" id="trMicBtn" onclick="toggleTrMic()" title="语音输入">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
-          <textarea id="trInput" placeholder="输入中文或泰语…" rows="1" onkeydown="trOnKey(event)" oninput="trResize(this)"></textarea>
-          <button class="sbtn2" id="trSendBtn" onclick="sendTrans()">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
-          </button>
-        </div>
-        <div class="im">
-          <span id="trHint">Enter 翻译 · Shift+Enter 换行 · 🎙 语音输入</span>
-          <span id="trCnt" style="color:var(--txm)">0 条翻译</span>
-        </div>
-      </div>
+    <div class="im">
+      <span id="trHint">Enter 翻译 · Shift+Enter 换行 · 🎙 语音输入</span>
+      <span id="trCnt" style="color:var(--txm)">0 条翻译</span>
     </div>
   </div>
 </div>
-
-<!-- VOICE OVERLAY -->
-<div class="vco" id="vco">
-  <div class="vch">
-    <div class="vct"><div class="vcm">⬡</div><span>纯语音对话</span></div>
-    <div style="display:flex;align-items:center;gap:9px">
-      <span class="vcmtag" id="vcMTag" style="background:var(--sf2);color:var(--txd)">—</span>
-      <button class="vccl" onclick="exitVC()">✕ 退出</button>
-    </div>
-  </div>
-  <div class="vcbd">
-    <div class="vcaw">
-      <div class="vcav" id="vcAv">⬡</div>
-      <div class="vcst" id="vcSt">按麦克风开始对话</div>
-    </div>
-    <div class="vctr" id="vcTr"><div class="vcem">按一次麦克风 · 之后全程免手自动循环对话 🎙</div></div>
-  </div>
-  <div class="vcft">
-    <div class="vcw" id="vcWv"><span></span><span></span><span></span><span></span><span></span></div>
-    <button class="vcmic" id="vcMic" onclick="vcToggle()">
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-        <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-      </svg>
-    </button>
-    <div class="vchi" id="vcHi">点击开始，之后全程自动循环</div>
-  </div>
-</div>
-
-<!-- FAB voice button (mobile) -->
-<button class="fab-voice" id="fabVoice" onclick="fabVoiceClick()" title="纯语音对话">
-  <div class="fab-label">纯语音</div>
-  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-    <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-  </svg>
-</button>
-
-<!-- MOBILE BOTTOM NAV -->
-<nav class="bnav" id="bnav">
-  <button class="bni act" id="bn0" onclick="bnClick('home')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-    </svg>
-    <span class="bnl">首页</span>
-  </button>
-  <button class="bni" id="bn1" onclick="bnClick('models')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
-    </svg>
-    <span class="bnl">模型</span>
-  </button>
-  <button class="bni" id="bn2" onclick="bnClick('voice')">
-    <div class="bndot"></div>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
-    </svg>
-    <span class="bnl" id="bn2lab">语音</span>
-  </button>
-  <button class="bni" id="bn3" onclick="toggleVP()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-      <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/>
-    </svg>
-    <span class="bnl" id="bn3lab">播报</span>
-  </button>
-  <button class="bni" id="bn4" onclick="openCfg()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-    <span class="bnl">设置</span>
-  </button>
-</nav>
+</main>
 
 <div class="tc" id="tc"></div>
-
 <!-- SETTINGS MODAL -->
 <div class="mo" id="cfgMo">
   <div class="mod">
@@ -854,7 +590,7 @@ var cfg = {
   gptmini:  {key:'', url:'https://poloai.top/v1',  model:'gpt-5-mini'},
   ds32:     {key:'', url:'https://poloai.top/v1',  model:'deepseek-v3.2'}
 };
-// 翻译专用 fast 模型（gpt-5.6-luna + reasoning low，简单翻译秒出）
+
 var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-luna'};
 
 // 写死的 GPT 模型（隐藏且不可改）
@@ -892,9 +628,8 @@ var whisperCfg = {key:'sk-dD8g5UM7d8CktwK9lF4KoFDS6srFCpEzzip108kIa3NaE6gf', url
 
 // ════ INIT ════
 loadCfg();
-buildSetupGrids();
-buildSidebar();
 buildCfgModal();
+showTranslation();
 
 // ════ SETUP ════
 function buildSetupGrids() {
@@ -1908,7 +1643,7 @@ function startTrans() {
   if (srMode==='whisper' && !whisperCfg.key) { toast('Whisper 未配置 API Key，已切回浏览器识别','er'); srMode='browser'; }
   trCount=0;
   showSc('trans');
-  document.getElementById('hbadge').textContent='中泰互译';
+  document.getElementById('hbadge').textContent='泰语 → 中文';
   document.getElementById('hbadge').className='hbadge';
   document.getElementById('hbadge').style.color='var(--dg)';
   document.getElementById('hbadge').style.borderColor='rgba(255,107,138,.3)';
@@ -1919,7 +1654,7 @@ function startTrans() {
 
 function clearTrans() {
   trCount=0;
-  document.getElementById('trMsgs').innerHTML='<div class="tr-emp" id="trEmp"><div class="emp-i">🇹🇭</div><div class="emp-t">中泰实时互译</div><div class="emp-s" style="font-family:IBM Plex Mono,monospace">输入文字或按麦克风说话<br>中文 → 泰语 · 泰语 → 中文</div></div>';
+  document.getElementById('trMsgs').innerHTML='<div class="tr-emp" id="trEmp"><div class="emp-i">🇹🇭</div><div class="emp-t">泰语 → 中文 翻译</div><div class="emp-s" style="font-family:IBM Plex Mono,monospace">输入泰语<br>自动翻译为中文</div></div>';
   document.getElementById('trCnt').textContent='0 条翻译';
   toast('已清空','ok');
 }
@@ -2147,18 +1882,11 @@ function trProcess(text) {
   // Remove empty prompt element
   var emp = document.getElementById('trEmp'); if(emp) emp.style.display='none';
 
-  // Detect source language
-  var lang = detectLang(text);
-  var isChinese = lang.indexOf('zh')===0 || lang==='en-US'; // treat English as "from Chinese side"
-  // If it contains significant Thai chars, it's Thai
-  var thCount=0, totalCount=0;
-  for(var i=0;i<text.length;i++){var c=text.charCodeAt(i);if(c>=0x0E00&&c<=0x0E7F){thCount++;totalCount++;}else if(c>0x20){totalCount++;}}
-  var isThai = totalCount>0 && (thCount/totalCount)>0.15;
-
-  var srcLang = isThai ? 'th' : 'zh';
-  var dstLang = isThai ? 'zh' : 'th';
-  var srcLabel = isThai ? 'ภาษาไทย' : '中文';
-  var dstLabel = isThai ? '中文' : 'ภาษาไทย';
+  // 单向翻译：泰语 → 中文
+  var srcLang = 'th';
+  var dstLang = 'zh';
+  var srcLabel = 'ภาษาไทย';
+  var dstLabel = '中文';
 
   // Show source text immediately
   var container = document.getElementById('trMsgs');
@@ -2174,15 +1902,9 @@ function trProcess(text) {
   container.appendChild(pair);
   scrollC(container);
 
-  // Call AI for translation
-  var sysPrompt, userPrompt;
-  if (isThai) {
-    sysPrompt = '你是专业中泰翻译。用户输入泰语，你只输出对应的中文翻译，不要解释，不要加任何其他文字。';
-    userPrompt = text;
-  } else {
-    sysPrompt = 'คุณเป็นนักแปลไทย-จีนมืออาชีพ ผู้ใช้ป้อนภาษาจีน คุณแปลเป็นภาษาไทยเท่านั้น ห้ามอธิบาย ห้ามเพิ่มข้อความอื่น\n你是专业中泰翻译。用户输入中文，你只输出对应的泰语翻译，不要解释，不要加任何其他文字。';
-    userPrompt = text;
-  }
+  // 提示词：泰语 → 中文，只输出中文
+  var sysPrompt = '你是专业泰中翻译。用户输入泰语，你只输出对应的中文翻译，不要解释，不要加任何其他文字。';
+  var userPrompt = text;
 
   var dstStarted=false;
   callMStream(TRANS_FAST, [{role:'user',content:userPrompt}], sysPrompt, function(fullTxt){
@@ -2350,9 +2072,33 @@ function toast(msg,type){
   var el=document.createElement('div'); el.className='tos'+(type?' '+type:''); el.textContent=msg;
   c.appendChild(el); setTimeout(function(){el.remove();},3500);
 }
+
+// ════ STANDALONE TRANSLATOR OVERRIDES ════
+// 独立翻译版：直接进入翻译界面，不依赖 setup/chat/disc 界面
+function showSc(name){
+  if (name==='trans') {
+    var sc=document.getElementById('transSc'); if(sc) sc.style.display='flex';
+  }
+}
+function backSetup(){ /* 独立版无返回 */ }
+function showTranslation() {
+  var sc=document.getElementById('transSc'); if(sc) sc.style.display='flex';
+  var badge=document.getElementById('hbadge'); if(badge) badge.textContent='泰语 → 中文';
+  var e=document.getElementById('trEngine'); if(e) e.textContent='Luna Fast';
+  var l=document.getElementById('trSrLabel'); if(l) l.textContent=(srMode==='whisper')?'Whisper API 语音识别':'浏览器语音识别';
+  trCount=0;
+  var c=document.getElementById('trCnt'); if(c) c.textContent='0 条翻译';
+}
+function selSrMode(m) {
+  srMode=m;
+  var b=document.getElementById('srBrowser'); if(b) b.className='rmb'+(m==='browser'?' active':'');
+  var w=document.getElementById('srWhisper'); if(w) w.className='rmb'+(m==='whisper'?' active tl':'');
+}
+function clearAll() { clearTrans(); }
+
 </script>
 
+<!-- (LAN sync stripped) -->
 
 </body>
-
 </html>
