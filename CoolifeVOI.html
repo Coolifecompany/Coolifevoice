@@ -134,6 +134,8 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 /* start button */
 .stbtn{width:100%;padding:15px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--ac),#8b7bf0);color:white;font-family:'Syne',sans-serif;font-size:16px;font-weight:700;letter-spacing:.06em;cursor:pointer;transition:all .3s;box-shadow:0 6px 25px rgba(108,92,231,.4)}
 .stbtn:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(108,92,231,.5)}
+.stbtn2{width:100%;padding:13px;border-radius:12px;border:1px solid var(--bd2);background:var(--sf2);color:var(--tx);font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;letter-spacing:.04em;cursor:pointer;transition:all .25s}
+.stbtn2:hover{border-color:var(--acb);color:var(--acb);background:var(--sf3);transform:translateY(-1px)}
 .stnote{text-align:center;margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--txm)}
 
 /* 1v1 CHAT SCREEN */
@@ -640,6 +642,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
                     </div>
         </div>
         <button class="stbtn" onclick="handleStart()">开始 →</button>
+        <button class="stbtn2" onclick="openHist()" style="margin-top:10px">📚 历史话题</button>
         <div class="stnote">需配置 API Key · 1对1 至少 1 个模型 · 多AI至少 2 个 · 中泰互译选 1 个</div>
       </div>
     </div>
@@ -953,6 +956,8 @@ var dRnd=0, dTrn=0, dLog=[], dCons=0, dHigh=0;
 var dRun=false, dAuto=false, dStop=false;
 var finalRpt='';
 var thinkIdx=0;
+var HIST_KEY='cvo2_disc_history';
+var dHistId='';   // 当前讨论对应的历史条目 id（同一讨论保存时去重更新）
 
 // Translation state
 var selTrans = 'gpt';      // model for translation (内置 key 的 GPT)
@@ -970,6 +975,11 @@ buildSetupGrids();
 buildSidebar();
 buildCfgModal();
 renderHistList();
+
+// ★ 离开/刷新页面时自动保存正在进行的讨论
+window.addEventListener('beforeunload',function(){
+  if(dRun||dLog.length){ autoSaveDisc(); }
+});
 
 // ════ SETUP ════
 function buildSetupGrids() {
@@ -1577,6 +1587,7 @@ function startDisc() {
   if(all.length<2){toast('至少2个已配置模型','er');return;}
   dTopic=topic; dStop=false; dRun=true; dAuto=runMode==='auto';
   dRnd=0; dTrn=0; dLog=[]; dCons=0; dHigh=0; finalRpt='';
+  dHistId='';   // ★ 新讨论开始，重置历史条目 id（保存时新建条目）
   showSc('disc');
   document.getElementById('guestTp').textContent=topic;
   document.getElementById('hbadge').textContent='多AI讨论';
@@ -1629,6 +1640,7 @@ function runRnd(isFollowUp) {
   }).then(function(){
     if(dStop)return;
     updStats();
+    autoSaveDisc();   // ★ 每轮结束自动保存（中途刷新也不丢）
     if(dRnd%3===0){return genReport(false);}
   }).then(function(){
     if(dStop)return;
@@ -2019,6 +2031,7 @@ function backSetup(){
   if(abCtrl){abCtrl.abort();abCtrl=null;}
   if(window.speechSynthesis)window.speechSynthesis.cancel();
   isProc=false; vcOn=false;
+  autoSaveDisc();   // ★ 返回前保存当前讨论
   // cleanup translation
   if(trRec){try{trRec.stop();}catch(e){}trRec=null;}
   if(trMediaRec&&trMediaRec.state==='recording'){try{trMediaRec.stop();}catch(e){}}
@@ -2076,6 +2089,7 @@ function newTopicBack(){
   if(abCtrl){try{abCtrl.abort();}catch(e){}abCtrl=null;}
   if(window.speechSynthesis)window.speechSynthesis.cancel();
   isProc=false; vcOn=false;
+  autoSaveDisc();   // ★ 新话题前保存当前讨论
   if(trRec){try{trRec.stop();}catch(e){}trRec=null;}
   if(trMediaRec&&trMediaRec.state==='recording'){try{trMediaRec.stop();}catch(e){}}
   trSt='idle';
@@ -2415,7 +2429,7 @@ function saveDiscHist(text){
     var h=getHist();
     // 保存完整讨论：报告 + 话题 + 参与模型 + 完整发言记录（dLog）
     var entry={
-      id:'h'+Date.now()+Math.floor(Math.random()*1000),
+      id:dHistId||('h'+Date.now()+Math.floor(Math.random()*1000)),
       time:new Date().toLocaleString('zh-CN',{hour12:false}),
       topic:dTopic||'未命名话题',
       guest:MI[dGuest]?MI[dGuest].name:dGuest,
@@ -2426,11 +2440,21 @@ function saveDiscHist(text){
         return {r:e.round, role:e.role, model:e.model, action:e.action, content:(e.content||'').slice(0,2000)};
       })
     };
-    h.unshift(entry);
+    dHistId=entry.id;
+    // upsert：同一次讨论更新已有条目，避免每次保存都新增重复记录
+    var idx=-1;
+    for(var i=0;i<h.length;i++){ if(h[i].id===entry.id){idx=i;break;} }
+    if(idx>=0){ h[idx]=entry; }
+    else{ h.unshift(entry); }
     if(h.length>200)h=h.slice(0,200);
     localStorage.setItem(HIST_KEY,JSON.stringify(h));
     renderHistList();
   }catch(e){}
+}
+// 讨论进行中自动保存（每轮结束调用，报告为空时也保留发言记录）
+function autoSaveDisc(){
+  if(!dRun && !dLog.length) return;
+  saveDiscHist(finalRpt||'');
 }
 // 侧边栏历史列表渲染
 var histSelecting=false;
