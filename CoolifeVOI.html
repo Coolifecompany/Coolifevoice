@@ -716,6 +716,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
       <div class="cb">
         <button class="cbt2 pri" id="ctCont" onclick="contDisc()"><span class="ci">▶</span><span>继续</span></button>
         <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
+        <button class="cbt2" id="ctFile" onclick="discInsertFolder()" title="扫描文件夹，勾选文件后GPT读取并结合当前话题继续讨论"><span class="ci">📄</span><span>读文件</span></button>
         <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
         <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
         <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
@@ -2075,6 +2076,9 @@ function addDiscImgMsg(text,dataUrl){
 // ════ FOLDER → DISCUSSION ════
 // 用户给一个文件夹路径（电脑/手机选文件夹），程序读取里面所有可读文件，
 // 两个 AI 各自阅读提炼观点，GPT 汇总成统一讨论主题，然后开始讨论。
+// ════ FOLDER SCAN → SELECT → READ → DISCUSS ════
+// 用户选文件夹 → 扫描出文件列表 → 弹窗勾选 → 只读勾选的文件
+// 两种模式：新话题（两个AI阅读→GPT汇总主题→讨论）和中途插入（GPT结合当前话题→继续讨论）
 var _folderInput=null;
 function pickFolder(){
   var inp=_folderInput;
@@ -2087,30 +2091,107 @@ function pickFolder(){
     var files=Array.prototype.slice.call(inp.files||[]);
     inp.value='';
     if(!files.length){toast('未选择文件夹','er');return;}
-    readFolderFiles(files);
+    // 扫描出文件列表，显示弹窗供勾选
+    showFileSelectModal(files, false);
   };
   inp.click();
 }
-// 读取文件夹里的可读文件（文本类直接读，图片收集，二进制文档给 AI 处理）
-function readFolderFiles(files){
-  var textFiles=[], imgs=[], others=[];
+// 讨论中"读文件"按钮 —— 中途插入
+function discInsertFolder(){
+  if(!dTopic){toast('请先开始讨论','er');return;}
+  var inp=_folderInput;
+  if(!inp){
+    inp=document.createElement('input');
+    inp.type='file'; inp.webkitdirectory=true; inp.multiple=true; inp.style.display='none';
+    document.body.appendChild(inp); _folderInput=inp;
+  }
+  inp.onchange=function(){
+    var files=Array.prototype.slice.call(inp.files||[]);
+    inp.value='';
+    if(!files.length){toast('未选择文件夹','er');return;}
+    // 中途插入模式：扫描→勾选→读取→GPT结合话题
+    showFileSelectModal(files, true);
+  };
+  inp.click();
+}
+// 文件选择弹窗
+var _scanMode=false;  // true=中途插入，false=新话题
+function showFileSelectModal(files, insertMode){
+  _scanMode=insertMode;
+  // 分类文件
   var TEXTE=/\.(txt|md|markdown|json|csv|html|htm|xml|log|py|js|ts|java|c|cpp|h|yaml|yml|toml|ini|conf|sh|bat|sql|css|scss|less|tsx|jsx)$/i;
+  var items=[];
   files.forEach(function(f){
-    var n=(f.name||'').toLowerCase();
-    if(/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(n))imgs.push(f);
-    else if(TEXTE.test(n))textFiles.push(f);
-    else others.push(f);  // pdf/docx/xlsx 等二进制文档
+    var n=f.name.toLowerCase();
+    var type='text';
+    if(/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(n))type='image';
+    else if(!TEXTE.test(n))type='other';
+    items.push({file:f, name:f.name, type:type, checked:true});
   });
-  if(!textFiles.length&&!imgs.length&&!others.length){toast('文件夹内无可读文件','er');return;}
-  toast('📂 读取 '+files.length+' 个文件（文本 '+textFiles.length+' · 图片 '+imgs.length+' · 文档 '+others.length+'）','ok');
-  // 逐文件读取文本内容
+  if(!items.length){toast('文件夹内无文件','er');return;}
+  // 构建选择弹窗
+  var mo=document.getElementById('maxOverlay');
+  if(!mo){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">选择文件</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); mo=d;
+  }
+  document.getElementById('maxTitle').textContent=insertMode?'📄 选择文件插入讨论（勾选→读取→结合话题继续）':'📂 选择文件生成讨论主题';
+  var body=document.getElementById('maxBody');
+  // 分类统计
+  var textCount=items.filter(function(i){return i.type==='text';}).length;
+  var imgCount=items.filter(function(i){return i.type==='image';}).length;
+  var otherCount=items.filter(function(i){return i.type==='other';}).length;
+  var html='<div style="font-size:11px;color:var(--txm);margin-bottom:8px">共扫描 '+items.length+' 个文件'
+    +(textCount?' · 文本 '+textCount:'')+(imgCount?' · 图片 '+imgCount:'')+(otherCount?' · 其他 '+otherCount:'')
+    +'</div>'
+    +'<div style="max-height:360px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:4px">';
+  items.forEach(function(it,i){
+    var icon=it.type==='image'?'🖼':(it.type==='other'?'📎':'📄');
+    html+='<label style="display:flex;align-items:center;gap:6px;padding:5px 6px;cursor:pointer;border-radius:6px;transition:background .15s" onmouseover="this.style.background=\'var(--sf2)\'" onmouseout="this.style.background=\'transparent\'">'
+      +'<input type="checkbox" checked data-i="'+i+'" class="fselcb" style="accent-color:var(--ac)">'
+      +'<span>'+icon+' '+esc(it.name)+'</span></label>';
+  });
+  html+='</div>';
+  html+='<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+    +'<button class="pab" onclick="closeMax();toast(\'已取消\',\'ok\')" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'<button class="pab" onclick="closeMax();selFileAll(true)" style="font-size:11px;padding:6px 14px">全选</button>'
+    +'<button class="pab" onclick="closeMax();selFileAll(false)" style="font-size:11px;padding:6px 14px">全不选</button>'
+    +'<button class="pab pri" onclick="closeMax();readSelectedFiles()" style="font-size:11px;padding:6px 14px">✅ 读取勾选的文件</button>'
+    +'</div>';
+  body.innerHTML=html;
+  // 保存文件列表供后续读取
+  _scanFiles=items;
+  mo.classList.add('open');
+}
+var _scanFiles=null;
+function selFileAll(checked){
+  document.querySelectorAll('.fselcb').forEach(function(cb){cb.checked=checked;});
+  toast(checked?'已全选':'已全不选','ok');
+}
+// 读取勾选的文件
+function readSelectedFiles(){
+  if(!_scanFiles||!_scanFiles.length){toast('无文件','er');return;}
+  var selected=_scanFiles.filter(function(it,i){
+    var cb=document.querySelector('.fselcb[data-i="'+i+'"]');
+    return cb&&cb.checked;
+  });
+  if(!selected.length){toast('请至少勾选一个文件','er');return;}
+  var textFiles=[], imgs=[], others=[];
+  selected.forEach(function(it){
+    if(it.type==='image')imgs.push(it.file);
+    else if(it.type==='text')textFiles.push(it.file);
+    else others.push(it.file);
+  });
+  // 准备读取文本文件内容
+  toast('📂 正在读取 '+selected.length+' 个文件…','ok');
   var contents=[];
   var chain=Promise.resolve();
   textFiles.forEach(function(f){
     chain=chain.then(function(){return new Promise(function(res){
       var rd=new FileReader();
       rd.onload=function(){
-        var txt=String(rd.result||'').slice(0,60000);  // 每文件限 60KB
+        var txt=String(rd.result||'').slice(0,60000);
         contents.push('【文件：'+f.name+'】\n'+(txt.trim()||'(空)')+'\n');
         res();
       };
@@ -2120,50 +2201,77 @@ function readFolderFiles(files){
   });
   chain.then(function(){
     if(imgs.length){
-      contents.push('【图片文件】'+imgs.map(function(f){return f.name;}).join('、')+'（共'+imgs.length+'张，交由视觉AI读取）');
+      contents.push('【图片文件】'+imgs.map(function(f){return f.name;}).join('、')+'（共'+imgs.length+'张，需有视觉能力的AI读取）');
     }
     if(others.length){
       contents.push('【其他文档】'+others.map(function(f){return f.name;}).join('、')+'（共'+others.length+'个，如docx/pdf/xlsx需专门的解析AI读取）');
     }
     var full=contents.join('\n\n');
-    folderToTopic(full, imgs, others);
+    if(_scanMode) discInsertRead(full, imgs, others);
+    else folderNewTopic(full, imgs, others);
   });
 }
-// 两个 AI 阅读提炼观点 → GPT 汇总统一主题 → 开始讨论
-function folderToTopic(fullText, imgs, others){
+// 中途插入：GPT 读取文件 → 结合当前话题 → 继续讨论
+function discInsertRead(fullText, imgs, others){
+  var textPart=fullText.length>30000?fullText.slice(0,30000)+'\n…(截断)':fullText;
+  var imgNote=imgs.length?'\n\n文件夹中还有'+imgs.length+'张图片：'+imgs.map(function(f){return f.name;}).join('、'):'';
+  var otherNote=others.length?'\n\n文件夹中还有'+others.length+'个二进制文档：'+others.map(function(f){return f.name;}).join('、'):'';
+  var ctx=buildCtx();
+  addHostMsg('📄 你选择了文件夹中的文件，GPT-5.6 正在结合当前话题「'+dTopic+'」阅读并分析…');
+  var p='当前讨论话题：'+dTopic+'\n\n已有讨论记录：\n'+ctx+'\n\n'
+    +'用户从文件夹中选了以下文件，内容如下：\n\n'+textPart+imgNote+otherNote+'\n\n'
+    +'请完成：\n'
+    +'1. 【文件内容概括】用一段话概括文件的核心内容\n'
+    +'2. 【与话题的关联】这些内容与当前讨论话题「'+dTopic+'」有何关联——支持了某个观点、反驳了某个观点、补充了缺失信息，还是提出了新问题？\n'
+    +'3. 【你的评估意见】作为GPT-5.6，从讨论角度给出你的判断，并指出哪些点值得继续讨论\n'
+    +'输出格式：用【】分隔三个段落，主体用纯文字，避免JSON/表格标记。';
+  var tid=addDiscThink('gpt',true);
+  callM('gpt',[{role:'user',content:p}],'你是GPT-5.6，最高权限。阅读用户选中的文件内容，结合当前讨论话题给出分析。').then(function(r){
+    rmEl(tid);
+    addDiscGuestMsg('gpt',r);
+    dLog.push({role:'guest',model:'gpt',action:'文件阅读分析',content:r,round:dRnd});
+    // 自动触发下一轮，让所有AI看到文件分析结果并继续讨论
+    dStop=false;
+    setCtrl(true);
+    setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },600);
+  }).catch(function(err){
+    rmEl(tid);
+    if(err.name!=='AbortError'){addHostMsg('❌ 文件读取分析失败：'+err.message);toast(err.message,'er');}
+    setCtrl(false);
+  });
+}
+// 新话题：两个AI阅读 → GPT汇总统一主题 → 开始讨论
+function folderNewTopic(fullText, imgs, others){
   if(!fullText.trim()){toast('未读取到文件内容','er');return;}
   var sel=Object.keys(selMulti).filter(function(k){return selMulti[k]&&cfg[k].key;});
   if(sel.length<2){toast('多AI讨论需至少2个已选模型','er');return;}
-  // 选两个"有阅读能力"的 AI 作为初始观点提出者（gpt 优先，其次 gemini）
   var readers=[];
   ['gpt','gemini','deepseek','opus'].forEach(function(m){ if(sel.indexOf(m)>=0&&readers.length<2)readers.push(m); });
   if(readers.length<2)readers=sel.slice(0,2);
   var reader1=readers[0], reader2=readers[1];
-  // 文本内容
   var textPart=fullText.length>50000?fullText.slice(0,50000)+'\n…(截断)':fullText;
-  var hostMsg='📂 已读取文件夹内容，正在让 '+MI[reader1].name+' 和 '+MI[reader2].name+' 分别阅读并提炼讨论主题…';
+  var imgNote=imgs.length?'\n\n（文件夹中还有'+imgs.length+'张图片，需视觉AI读取）':'';
+  var otherNote=others.length?'\n\n（文件夹中还有'+others.length+'个二进制文档，需专门解析AI读取）':'';
   showSc('disc');
-  document.getElementById('guestTp').textContent='读取文件夹讨论';
+  document.getElementById('guestTp').textContent='文件夹文件讨论';
   document.getElementById('hbadge').textContent='多AI讨论';
   document.getElementById('hbadge').className='hbadge tl';
-  addHostMsg(hostMsg);
   dTopic='文件夹内容讨论'; dStop=false; dRun=true; dAuto=runMode==='auto';
   dRnd=0; dTrn=0; dLog=[]; dCons=0; dHigh=0; finalRpt='';
   setCtrl(true); abCtrl=new AbortController();
-  var sys1='你是'+MI[reader1].name+'（'+MI[reader1].role+'）。请阅读下面的文档/文件夹内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。';
-  var sys2='你是'+MI[reader2].name+'（'+MI[reader2].role+'）。请阅读下面的文档/文件夹内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。请尽量与另一位AI的角度不同，提出不同的讨论主题。';
-  var p1='文件夹内容：\n\n'+textPart+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
-  var p2='文件夹内容：\n\n'+textPart+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
-  // reader1 阅读并给主题
+  addHostMsg('📂 已读取勾选的文件，正在让 '+MI[reader1].name+' 和 '+MI[reader2].name+' 分别阅读并提炼讨论主题…');
+  var fullContent=textPart+imgNote+otherNote;
+  var sys1='你是'+MI[reader1].name+'（'+MI[reader1].role+'）。请阅读下面的文件内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。';
+  var sys2='你是'+MI[reader2].name+'（'+MI[reader2].role+'）。请阅读下面的文件内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。请尽量与另一位AI的角度不同，提出不同的讨论主题。';
+  var p1='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
+  var p2='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
   callM(reader1,[{role:'user',content:p1}],sys1).then(function(r1){
-    var d1=addFolderMsg(reader1,r1);
+    addFolderMsg(reader1,r1);
     dLog.push({role:'guest',model:reader1,action:'文档阅读',content:r1,round:dRnd});
-    // reader2 阅读并给主题
     return callM(reader2,[{role:'user',content:p2}],sys2).then(function(r2){
-      var d2=addFolderMsg(reader2,r2);
+      addFolderMsg(reader2,r2);
       dLog.push({role:'guest',model:reader2,action:'文档阅读',content:r2,round:dRnd});
-      // gpt 汇总两个主题 → 统一讨论主题
-      var pG='两位AI各自阅读了文件夹内容并提出了讨论主题：\n\n'
+      var pG='两位AI各自阅读了文件内容并提出了讨论主题：\n\n'
         +'【'+MI[reader1].name+'】\n'+r1+'\n\n'
         +'【'+MI[reader2].name+'】\n'+r2+'\n\n'
         +'请综合两个主题，提炼出一个统一的讨论主题（一句话，精炼），并说明为什么这个主题值得讨论。只输出：\n【统一讨论主题】\n【理由】';
@@ -2171,14 +2279,12 @@ function folderToTopic(fullText, imgs, others){
         dTopic=gt.replace(/^【统一讨论主题】/,'').split('\n')[0].replace(/[【】]/g,'').trim().slice(0,80)||'文件夹内容讨论';
         addFolderMsg('gpt',gt);
         dLog.push({role:'img',model:'gpt',action:'主题汇总',content:gt,round:dRnd});
-        // 设定主导和评议：gpt 为主导（最高权限），其余参与 AI 评议
         dGuest='gpt';
         var all=sel;
         dRevs=all.filter(function(m){return m!=='gpt';});
         if(!dRevs.length)dRevs=all;
         updGuestBar();
         addHostMsg('🎯 统一讨论主题：「'+dTopic+'」\n👥 主导：'+MI[dGuest].name+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无'));
-        // 开始讨论
         setCtrl(true);
         setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },800);
       });
