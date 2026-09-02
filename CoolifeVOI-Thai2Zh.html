@@ -638,7 +638,7 @@ var cfg = {
   ds32:     {key:'', url:'https://poloai.top/v1',  model:'deepseek-v3.2'}
 };
 
-var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-luna'};
+var TRANS_FAST = {key:'sk-YuhKHucwxk539K8GDEHcwXJjHttJM4C4W9wDBaVnkjNSAIJu', url:'https://polocn.580ai.net/v1', model:'gpt-4.1-mini'};
 
 // 写死的 GPT 模型（隐藏且不可改）
 var FIXED_MODEL = 'gpt';
@@ -1694,7 +1694,7 @@ function startTrans() {
   document.getElementById('hbadge').className='hbadge';
   document.getElementById('hbadge').style.color='var(--dg)';
   document.getElementById('hbadge').style.borderColor='rgba(255,107,138,.3)';
-  document.getElementById('trEngine').textContent='Luna Fast';
+  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'gpt-4.1-mini').split('-').slice(0,2).join('-')+' Fast';
   document.getElementById('trSrLabel').textContent=srMode==='whisper'?'Whisper API 语音识别':'浏览器语音识别';
   trSt='idle';
 }
@@ -2039,7 +2039,7 @@ function callMStream(model, messages, sysPrompt, onDelta) {
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true,reasoning_effort:'low'}),
+    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true}),
     signal:abCtrl?abCtrl.signal:undefined
   }).then(function(res){
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
@@ -2131,7 +2131,7 @@ function backSetup(){ /* 独立版无返回 */ }
 function showTranslation() {
   var sc=document.getElementById('transSc'); if(sc) sc.style.display='flex';
   var badge=document.getElementById('hbadge'); if(badge) badge.textContent='泰语 → 中文';
-  var e=document.getElementById('trEngine'); if(e) e.textContent='Luna Fast';
+  var e=document.getElementById('trEngine'); if(e) e.textContent=(TRANS_FAST.model||'gpt-4.1-mini').split('-').slice(0,2).join('-')+' Fast';
   var l=document.getElementById('trSrLabel'); if(l) l.textContent=(srMode==='whisper')?'Whisper API 语音识别':'浏览器语音识别';
   trCount=0;
   var c=document.getElementById('trCnt'); if(c) c.textContent='0 条翻译';
