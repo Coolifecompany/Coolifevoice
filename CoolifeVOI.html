@@ -2487,28 +2487,27 @@ function histOpen(i){
   }
   var h=getHist(); var it=h[i];
   if(!it)return;
-  // 回看完整讨论：报告 + 发言记录
-  var html='<div style="padding:0 2px">';
-  html+='<div style="font-size:13px;font-weight:700;margin-bottom:4px">🎯 '+esc(it.topic||'未命名')+'</div>';
-  html+='<div style="font-size:10px;color:var(--txm);margin-bottom:10px">🕒 '+it.time+' · 主导 '+esc(it.guest||'—')+' · '+it.rounds+'轮 · '+it.talks+'条 · 参与 '+esc(it.models||'—')+'</div>';
+  // 全屏回看完整讨论：报告 + 发言记录
+  var html='';
+  html+='<div style="font-size:18px;font-weight:700;margin-bottom:6px">🎯 '+esc(it.topic||'未命名')+'</div>';
+  html+='<div style="font-size:13px;color:var(--txm);margin-bottom:14px">🕒 '+it.time+' · 主导 '+esc(it.guest||'—')+' · '+it.rounds+'轮 · '+it.talks+'条 · 参与 '+esc(it.models||'—')+'</div>';
   if(it.report){
-    html+='<div class="mdst" style="margin-top:8px">最终报告</div>';
-    html+='<div style="font-size:12px;line-height:1.7;white-space:pre-wrap;word-break:break-word;background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:12px">'+esc(it.report)+'</div>';
+    html+='<div class="mdst" style="font-size:12px;margin-bottom:6px;margin-top:8px">最终报告</div>';
+    html+='<div style="font-size:16px;line-height:1.9;white-space:pre-wrap;word-break:break-word;background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:18px">'+esc(it.report)+'</div>';
   }
   if(it.log&&it.log.length){
-    html+='<div class="mdst">讨论过程</div>';
+    html+='<div class="mdst" style="font-size:12px;margin-bottom:8px">讨论过程</div>';
     html+=it.log.map(function(e){
       var n=MI[e.model]?MI[e.model].name:e.model;
       var tag=e.role==='guest'?'嘉宾':(e.role==='img'?'📷 插图':(e.role==='reviewer'?'评议':''));
-      return '<div style="border-left:2px solid var(--bd);padding:2px 0 2px 8px;margin:5px 0">'
-        +'<div style="font-size:9px;color:var(--txm)">第'+e.r+'轮 · '+(tag||'')+' '+esc(n)+' · '+esc(e.action||'')+'</div>'
-        +'<div style="font-size:11px;color:var(--tx);line-height:1.6;white-space:pre-wrap;word-break:break-word">'+esc(e.content||'')+'</div>'
+      return '<div style="border-left:3px solid var(--bd);padding:4px 0 4px 12px;margin:8px 0">'
+        +'<div style="font-size:12px;color:var(--txm)">第'+e.r+'轮 · '+(tag||'')+' '+esc(n)+' · '+esc(e.action||'')+'</div>'
+        +'<div style="font-size:15px;color:var(--tx);line-height:1.8;white-space:pre-wrap;word-break:break-word;margin-top:2px">'+esc(e.content||'')+'</div>'
         +'</div>';
     }).join('');
   }
   html+='</div>';
-  document.getElementById('histBody').innerHTML=html;
-  document.getElementById('histMo').classList.add('open');
+  viewMax(html, '📚 讨论回看 · '+esc(it.topic));
 }
 // 单选/多选删除模式
 function histSelectMode(){
