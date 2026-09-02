@@ -471,7 +471,7 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 <script>
 (function(){
   /* 访问密码：改这里即可更换 */
-    var PASSWORD = 'coolife2026';
+    var PASSWORD = 'Coolife034';
   var LS = 'cvo2_unlock_v1';
   function h(s){var x=0;for(var i=0;i<s.length;i++){x=(x*31+s.charCodeAt(i))>>>0;}return x.toString(36);}
   var target = h(PASSWORD);
@@ -835,27 +835,21 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 <script>
 // ════ MODEL INFO ════
 var MI = {
-  gpt:      {name:'GPT',        color:'#60a5fa', role:'通用综合·主持人',   emoji:'G'},
-  gemini:   {name:'Gemini',     color:'#a78bfa', role:'长文档·多模态',     emoji:'Ge'},
-  opus:     {name:'Opus',       color:'#34d399', role:'深度推理·工程规划', emoji:'Op'},
-  deepseek: {name:'DeepSeek',   color:'#fb7185', role:'中文专家·中文报告', emoji:'Ds'},
-  sonnet:   {name:'Sonnet 4.6', color:'#f59e0b', role:'快速响应·日常对话', emoji:'So'},
-  gptmini:  {name:'GPT-5-Mini', color:'#38bdf8', role:'轻量快速·日常问答', emoji:'Gm'},
-  ds32:     {name:'DeepSeek V3.2', color:'#f472b6', role:'中文推理·深度分析', emoji:'D3'}
+  gpt:      {name:'GPT-5.6',     color:'#60a5fa', role:'通用综合·主持人',   emoji:'G'},
+  gemini:   {name:'Gemini 3.7',  color:'#a78bfa', role:'长文档·多模态',     emoji:'Ge'},
+  deepseek: {name:'DeepSeek',    color:'#fb7185', role:'中文专家·中文报告', emoji:'Ds'},
+  opus:     {name:'Opus 4.8',    color:'#34d399', role:'深度推理·工程规划', emoji:'Op'}
 };
-var MODELS = ['gpt','gemini','opus','deepseek','sonnet','gptmini','ds32'];
+var MODELS = ['gpt','gemini','deepseek','opus'];
 
 var cfg = {
-  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',  model:'gpt-5.6-sol'},
-  gemini:   {key:'', url:'https://xyuapi.top/v1',  model:'gemini-3.1-pro-preview'},
-  opus:     {key:'', url:'https://xyuapi.top/v1',  model:'claude-opus-4-6-thinking'},
-  deepseek: {key:'', url:'https://xyuapi.top/v1',  model:'deepseek-v3.2-thinking'},
-  sonnet:   {key:'', url:'https://xyuapi.top/v1',  model:'claude-sonnet-4-6-thinking'},
-  gptmini:  {key:'', url:'https://poloai.top/v1',  model:'gpt-5-mini'},
-  ds32:     {key:'', url:'https://poloai.top/v1',  model:'deepseek-v3.2'}
+  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-sol'},
+  gemini:   {key:'sk-nnicykKjLGsuDYbMo71m6jnbUsxKKLKK4ojU1RmdaWC5dQ8D', url:'https://polocn.580ai.net/v1', model:'gemini-3.7-flash'},
+  deepseek: {key:'sk-xsJ2pPRvFHdkddr0xxq8KZDX00DXdLXvcPxZsHfRZKjuqH2X', url:'https://polocn.580ai.net/v1', model:'deepseek-v3.2'},
+  opus:     {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1',          model:'claude-opus-4-8-thinking'}
 };
-// 翻译专用 fast 模型（gpt-5.6-luna + reasoning low，简单翻译秒出）
-var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-luna'};
+// 翻译引擎：gpt-5.6-sol（内置，不走思考更快）
+var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-sol'};
 
 // 写死的 GPT 模型（隐藏且不可改）
 var FIXED_MODEL = 'gpt';
@@ -1912,7 +1906,7 @@ function startTrans() {
   document.getElementById('hbadge').className='hbadge';
   document.getElementById('hbadge').style.color='var(--dg)';
   document.getElementById('hbadge').style.borderColor='rgba(255,107,138,.3)';
-  document.getElementById('trEngine').textContent='Luna Fast';
+  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'gpt-5.6-sol').split('-').slice(0,2).join('-')+' Fast';
   document.getElementById('trSrLabel').textContent=srMode==='whisper'?'Whisper API 语音识别':'浏览器语音识别';
   trSt='idle';
 }
@@ -2270,7 +2264,7 @@ function callMStream(model, messages, sysPrompt, onDelta) {
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true,reasoning_effort:'low'}),
+    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true}),
     signal:abCtrl?abCtrl.signal:undefined
   }).then(function(res){
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
@@ -2309,35 +2303,19 @@ function callMStream(model, messages, sysPrompt, onDelta) {
 }
 
 // ════ CONFIG ════
+// 所有模型已内置写死（key/url/model 均不可改），设置弹窗仅显示提示
 function buildCfgModal(){
-  var html='';
-  MODELS.forEach(function(k){
-    if(k===FIXED_MODEL) return;   // 固定模型不在设置中显示
-    var info=MI[k];
-    html+='<div class="mdsec"><div class="mdst">'+info.name+'</div><div class="fg">'
-      +'<div class="fl">API Key</div><input class="mi" type="password" id="ci-'+k+'-k" placeholder="sk-..." value="'+escA(cfg[k].key)+'">'
-      +'<div class="fl">API 地址</div><input class="mi" type="text" id="ci-'+k+'-u" value="'+escA(cfg[k].url)+'">'
-      +'<div class="fl">模型名称</div><input class="mi" type="text" id="ci-'+k+'-m" value="'+escA(cfg[k].model)+'">'
-      +'</div></div>';
-  });
-  // Whisper config: 固定内置，不在设置中显示
+  var html='<div class="mdsec"><div class="mdst">AI 模型</div><div class="fl" style="color:var(--txm);font-size:12px;line-height:1.6">所有模型已内置，无需配置。<br>模型：'+MODELS.map(function(k){return MI[k]?MI[k].name:k;}).join(' · ')+'</div></div>';
   document.getElementById('cfgBody').innerHTML=html;
 }
 function openCfg(){buildCfgModal();document.getElementById('cfgMo').classList.add('open');}
 function closeCfg(){document.getElementById('cfgMo').classList.remove('open');}
 function saveCfg(){
-  MODELS.forEach(function(k){
-    if(k===FIXED_MODEL) return;   // 固定模型不保存
-    cfg[k].key  =(document.getElementById('ci-'+k+'-k')||{}).value||'';
-    cfg[k].url  =(document.getElementById('ci-'+k+'-u')||{}).value||'';
-    cfg[k].model=(document.getElementById('ci-'+k+'-m')||{}).value||'';
-    cfg[k].key=cfg[k].key.trim(); cfg[k].url=cfg[k].url.trim(); cfg[k].model=cfg[k].model.trim();
-  });
-  // Whisper: 固定内置，不在设置中显示/保存
-  saveCfgLS(); closeCfg(); toast('✓ 配置已保存','ok');
+  // 所有模型固定内置，无需保存
+  closeCfg();
 }
-function loadCfg(){try{var s=localStorage.getItem('cvo2_cfg');if(s){var p=JSON.parse(s);MODELS.forEach(function(k){if(k===FIXED_MODEL)return;if(p[k])Object.assign(cfg[k],p[k]);});}}catch(e){}}
-function saveCfgLS(){try{var d=JSON.parse(JSON.stringify(cfg));d._whisper=whisperCfg;localStorage.setItem('cvo2_cfg',JSON.stringify(d));}catch(e){}}
+function loadCfg(){ /* 所有模型内置写死，忽略 localStorage 覆盖 */ }
+function saveCfgLS(){ /* 不保存内置 key 到 localStorage */ }
 
 // ════ UTILS ════
 function rmEl(id){var e=document.getElementById(id);if(e)e.remove();}
