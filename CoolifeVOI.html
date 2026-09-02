@@ -879,7 +879,7 @@ var finalRpt='';
 var thinkIdx=0;
 
 // Translation state
-var selTrans = 'gptmini';      // model for translation
+var selTrans = 'gpt';      // model for translation (内置 key 的 GPT)
 var srMode = 'whisper';        // 'browser' | 'whisper'
 var trSt = 'idle';             // idle | recording | processing | speaking
 var trRec = null;              // browser SpeechRecognition
@@ -2039,26 +2039,104 @@ function trListenWhisper() {
 function trWhisperTranscribe(blob) {
   setTrSt('processing');
   document.getElementById('trHint').textContent='Whisper 识别中…';
-  var url = whisperCfg.url.replace(/\/+$/,'') + '/audio/transcriptions';
-  var fd = new FormData();
-  fd.append('file', blob, 'audio.webm');
-  fd.append('model', whisperCfg.model || 'whisper-1');
-  // 不指定language让Whisper自动检测
-  fetch(url, {
-    method: 'POST',
-    headers: {'Authorization': 'Bearer ' + whisperCfg.key},
-    body: fd
-  }).then(function(res) {
-    if (!res.ok) return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Whisper HTTP '+res.status);});
-    return res.json();
-  }).then(function(data) {
-    var text = (data.text||'').trim();
-    if (!text) { toast('未识别到语音','er'); setTrSt('idle'); return; }
-    trProcess(text);
+  // WebM/opus 的时长头常缺，导致部分后端报 "full EBML parser"。
+  // 这里先用 AudioContext 解码，再重封装成标准 WAV（带完整 RIFF 头）上传。
+  decodeWebmToWav(blob).then(function(wavBlob){
+    var url = whisperCfg.url.replace(/\/+$/,'') + '/audio/transcriptions';
+    var fd = new FormData();
+    fd.append('file', wavBlob, 'audio.wav');
+    fd.append('model', whisperCfg.model || 'whisper-1');
+    // 不指定language让Whisper自动检测
+    return fetch(url, {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + whisperCfg.key},
+      body: fd
+    }).then(function(res) {
+      if (!res.ok) return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Whisper HTTP '+res.status);});
+      return res.json();
+    }).then(function(data) {
+      var text = (data.text||'').trim();
+      if (!text) { toast('未识别到语音','er'); setTrSt('idle'); return; }
+      trProcess(text);
+    }).catch(function(err) {
+      toast('Whisper 识别失败: '+err.message,'er');
+      setTrSt('idle');
+    });
   }).catch(function(err) {
-    toast('Whisper 识别失败: '+err.message,'er');
-    setTrSt('idle');
+    // 解码失败（如浏览器不支持）→ 回退直接上传原 webm
+    var url = whisperCfg.url.replace(/\/+$/,'') + '/audio/transcriptions';
+    var fd = new FormData();
+    fd.append('file', blob, 'audio.webm');
+    fd.append('model', whisperCfg.model || 'whisper-1');
+    fetch(url, {
+      method: 'POST',
+      headers: {'Authorization': 'Bearer ' + whisperCfg.key},
+      body: fd
+    }).then(function(res) {
+      if (!res.ok) return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'Whisper HTTP '+res.status);});
+      return res.json();
+    }).then(function(data) {
+      var text = (data.text||'').trim();
+      if (!text) { toast('未识别到语音','er'); setTrSt('idle'); return; }
+      trProcess(text);
+    }).catch(function(err2) {
+      toast('Whisper 识别失败: '+err2.message,'er');
+      setTrSt('idle');
+    });
   });
+}
+
+// 把 WebM/audio blob 解码并重封装为标准 WAV（16-bit PCM 单声道）
+function decodeWebmToWav(blob) {
+  return new Promise(function(resolve, reject) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { reject(new Error('AudioContext 不可用')); return; }
+    var ac = new AC();
+    var fileReader = new FileReader();
+    fileReader.onerror = function(){ try{ac.close();}catch(e){} reject(new Error('读取音频失败')); };
+    fileReader.onload = function() {
+      ac.decodeAudioData(fileReader.result, function(audioBuffer) {
+        try {
+          var numCh = 1, sr = audioBuffer.sampleRate;
+          var len = audioBuffer.length;
+          var data = new Float32Array(len);
+          var ch = audioBuffer.getChannelData(0);
+          for (var i=0;i<len;i++) data[i]=ch[i];
+          var wav = encodeWav(data, sr);
+          try{ac.close();}catch(e){}
+          resolve(new Blob([wav], {type:'audio/wav'}));
+        } catch(e){ try{ac.close();}catch(_e){} reject(e); }
+      }, function(err){ try{ac.close();}catch(e){} reject(new Error('音频解码失败')); });
+    };
+    fileReader.readAsArrayBuffer(blob);
+  });
+}
+
+// Float32 PCM → 16-bit WAV 文件字节（含标准 44 字节 RIFF 头）
+function encodeWav(samples, sampleRate) {
+  var buffer = new ArrayBuffer(44 + samples.length * 2);
+  var view = new DataView(buffer);
+  function writeStr(off, s){ for(var i=0;i<s.length;i++) view.setUint8(off+i, s.charCodeAt(i)); }
+  writeStr(0,'RIFF');
+  view.setUint32(4, 36 + samples.length*2, true);
+  writeStr(8,'WAVE');
+  writeStr(12,'fmt ');
+  view.setUint32(16, 16, true);            // PCM chunk size
+  view.setUint16(20, 1, true);             // audio format = PCM
+  view.setUint16(22, 1, true);             // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate*2, true);  // byte rate
+  view.setUint16(32, 2, true);             // block align
+  view.setUint16(34, 16, true);            // bits per sample
+  writeStr(36,'data');
+  view.setUint32(40, samples.length*2, true);
+  var off = 44;
+  for (var i=0;i<samples.length;i++) {
+    var s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(off, s<0 ? s*0x8000 : s*0x7FFF, true);
+    off += 2;
+  }
+  return buffer;
 }
 
 // ── Core translation process ──
