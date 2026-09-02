@@ -1203,8 +1203,16 @@ function toggleVP() {
 function tts(text) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
+  // 只去掉文字排版标点，保留数学/技术符号（+ - = > < ( ) [ ] { } / \ ^ _ % ≈ ≠ ≤ ≥ ∞ ± × ÷ 等）
+  // 去除各种引号、书名号、方括号、逗号句号感叹号问号分号冒号、星号井号等
+  var clean = text
+    .replace(/[\u2018\u2019\u201c\u201d\u300c\u300d\u300e\u300f\u300a\u300b\u3008\u3009\u3010\u3011\u2032\u2033\u2103\u2122\u00a0\u2000-\u206F\u3000-\u303F\uff00-\uffef]/g,'')
+    .replace(/[，。！？、；：""''「」【】《》（）〈〉『』〔〕﹃﹄﹁﹂﹏﹋﹌﹪﹫﹠﹦﹢﹤﹥﹨﹩﹪﹫！＂＃＄％＆＇（）＊＋，－．／：；＜＝＞？＠［＼］＾＿｀｛｜｝～]/g,'')
+    .replace(/[.,!?;:"'*#@$~`&|…—·–]/g,' ')
+    .replace(/　/g,'')
+    .replace(/\s{2,}/g,' ').trim();
   var lang = detectLang(text);
-  var utt=new SpeechSynthesisUtterance(text);
+  var utt=new SpeechSynthesisUtterance(clean);
   utt.lang=lang; utt.rate=1.0; utt.pitch=1.0;
   var voice = findVoice(lang);
   if(voice) utt.voice=voice;
@@ -1685,10 +1693,22 @@ function togAuto() {
 
 function endDisc() {
   dStop=true; setCtrl(true);
-  var tid=addDiscThink(dGuest,true);
+  var tid=addDiscThink('gpt',true);
   var ctx=buildCtx();
-  var p='话题："'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请输出最终总结（每项必填，全部用纯文字表达，禁止输出代码块/JSON/表格标记，把任何结构化内容转述为自然语言）：\n\n1. 本轮主问题：\n\n2. 我的初始立场：\n\n3. 收到的关键反对（来自哪个AI、第几轮）：\n\n4. 我采纳的修正：\n\n5. 当前共识：\n\n6. 保留分歧：\n\n7. 是否建议继续讨论：';
-    callM(dGuest,[{role:'user',content:p}],'你是'+MI[dGuest].name+'，嘉宾，整合所有反馈输出最终总结，必须吸收修正，不可仅复述初始立场。只输出纯文字总结，不要输出 JSON 或代码。').then(function(reply){
+  var p='话题："'+dTopic+'"\n\n完整的讨论记录：\n'+ctx+'\n\n'
+    +'请先通读以上全部讨论记录，然后**公平公正地总结**。\n\n'
+    +'格式要求（全部纯文字，不要 JSON/代码/表格）：\n\n'
+    +'【各方观点回顾】\n'
+    +'- 嘉宾（'+MI[dGuest].name+'）的主要观点和立场\n'
+    +'- 各评议 AI 的补充/质疑/反对/修正\n'
+    +'- 谁提出了什么，谁反驳了什么，谁修正了什么\n\n'
+    +'【共识部分】\n'
+    +'讨论中各方已达成的共识，共同认可的观点\n\n'
+    +'【分歧部分】\n'
+    +'仍在存在的分歧，各方立场对比\n\n'
+    +'【GPT-5.6 最终结论】\n'
+    +'阅读完整讨论后，作为最高权限 AI，给出你的最终判断和结论。';
+  callM('gpt',[{role:'user',content:p}],'你是 GPT-5.6，最高权限 AI。你的任务是公平公正地阅读完整讨论，先客观总结各方观点，再给出你自己的最终结论。只输出纯文字。').then(function(reply){
     rmEl(tid); finalRpt=reply; showFinalSum(reply);
   }).catch(function(err){
     rmEl(tid); if(err.name!=='AbortError')toast('报告失败：'+err.message,'er');
@@ -1698,25 +1718,42 @@ function endDisc() {
 
 function showFinalSum(text) {
   var parts=parseFinal(text);
-  var labels=['本轮主问题','初始立场','关键反对意见','采纳的修正','当前共识','保留分歧','是否建议继续'];
-  var icons=['🎯','📌','⚡','✅','🤝','❓','🔮'];
+  var labels=['各方观点回顾','共识部分','分歧部分','GPT-5.6 最终结论'];
+  var icons=['🗣','🤝','⚡','⭐'];
   var html='';
   for(var i=0;i<parts.length;i++){
     html+='<div class="sumsec"><div class="suml"><div class="sumlnum">'+(i+1)+'</div><span>'+icons[i]+' '+labels[i]+'</span></div>'
-      +'<div class="sumc'+(i===0||i===4?' hi':'')+'">'+esc(parts[i])+'</div></div>';
+      +'<div class="sumc'+(i===3?' hi':'')+'">'+esc(parts[i])+'</div></div>';
   }
   document.getElementById('sumBody').innerHTML=html;
-  document.getElementById('sumMeta').textContent='嘉宾 '+MI[dGuest].name+' 整合 · '+dRnd+' 轮 · '+dLog.length+' 条发言';
+  document.getElementById('sumMeta').textContent='GPT-5.6 公平公正总结 · '+MI[dGuest].name+' 主导 · '+dRnd+' 轮 · '+dLog.length+' 条发言';
   showSc('summary'); dRun=false;
   saveDiscHist(text);
 }
 function parseFinal(text) {
-  var parts=text.split(/\n\d+\.\s*/);
+  var map=[['【各方观点回顾】','各方观点回顾'],['【共识部分】','共识部分'],['【分歧部分】','分歧部分'],['【GPT-5.6 最终结论】','GPT-5.6 最终结论'],['【GPT-5.6结论】','GPT-5.6 最终结论'],['【最终结论】','GPT-5.6 最终结论']];
   var secs=[];
-  if(parts.length>1){for(var i=1;i<Math.min(parts.length,8);i++)secs.push(parts[i].replace(/^[^\n]*：?\n?/,'').trim()||'（未提供）');}
-  else secs.push(text);
-  while(secs.length<7)secs.push('（未提供）');
-  return secs.slice(0,7);
+  var lines=text.split('\n');
+  var cur=null; var buf=[];
+  var flush=function(){ if(cur){secs.push({key:cur,val:buf.join('\n').trim()});} buf=[]; };
+  for(var i=0;i<lines.length;i++){
+    var ln=lines[i]; var hit=null;
+    for(var j=0;j<map.length;j++){ if(ln.indexOf(map[j][0])>=0){hit=map[j][1];break;} }
+    if(hit){ flush(); cur=hit; }
+    else buf.push(ln);
+  }
+  flush();
+  // 按标准四段顺序排列
+  var order=['各方观点回顾','共识部分','分歧部分','GPT-5.6 最终结论'];
+  var out=[];
+  for(var k=0;k<order.length;k++){
+    var found='';
+    for(var m=0;m<secs.length;m++){ if(secs[m].key===order[k]){found=secs[m].val;break;} }
+    out.push(found||'（未提供）');
+  }
+  // 若 AI 没按【】分节，整段文字作为观点回顾
+  if(out[0]==='（未提供）'&&text.trim())out[0]=text.trim();
+  return out;
 }
 
 // DOM helpers - discussion
@@ -1980,17 +2017,17 @@ function discImgAnalyze(dataUrl){
   // 结合当前话题 + 讨论记录，让 gpt 识别并整理
   var ctx=buildCtx();
   var prompt='当前讨论话题："'+dTopic+'"\n\n已有讨论记录：\n'+ctx+'\n\n'
-    +'现在用户插入了一张图片。请完成：\n'
-    +'1. 详细识别图片内容（物体/文字/结构/场景）\n'
-    +'2. 描述图中各元素之间的逻辑关系\n'
-    +'3. 结合当前讨论话题，说明这张图片对讨论的推进作用/新信息/新论点\n'
-    +'4. 如果适合，用 JSON 或代码形式结构化输出关键信息；否则用清晰文字\n'
-    +'输出格式要求：先输出图片识别结果，再输出"【讨论推进】"段落给出对话题的增量建议。';
+    +'现在用户插入了一张图片。请你以"讨论参与者"的身份读图并给出评估意见，而不是单纯描述图片：\n'
+    +'1. 图片内容：识别图中物体/文字/结构/场景，表述清楚图片到底在讲什么\n'
+    +'2. 与话题的结合：这张图片对当前话题意味着什么——它是支持了某个观点、反驳了某个观点、补充了缺失的信息，还是提出了新问题？\n'
+    +'3. 你的评估意见：作为 GPT-5.6，从讨论角度给出你对这张图片的判断——它可靠吗？它引出了什么值得继续讨论的点？\n'
+    +'4. 输出形式：优先用清晰文字表述；若涉及数据/结构/逻辑关系，可用 JSON 或代码片段辅助，但主体是文字评估\n'
+    +'输出格式：先"【图片内容】"段落，再"【与话题的结合】"段落，最后"【我的评估】"段落给出明确的讨论观点。';
   var msg={role:'user',content:[
     {type:'text',text:prompt},
     {type:'image_url',image_url:{url:dataUrl}}
   ]};
-  callM('gpt',[msg],'你是图像分析专家 GPT-5.6，负责把图片"翻译"成文字/JSON/代码供其他AI理解，并推动讨论。').then(function(txt){
+  callM('gpt',[msg],'你是讨论中的最高权限 AI GPT-5.6，负责读图并把图片内容转化为对当前讨论的评估意见——支持/反驳/补充/提出新问题，推动讨论前进。').then(function(txt){
     // 清理缩略图提示，用正式消息替代
     pv.remove();
     // 以"图片分析（GPT-5.6）"消息写入讨论 + 注入 dLog 让所有 AI 可见
