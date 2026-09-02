@@ -2045,9 +2045,9 @@ function discImgAnalyze(dataUrl){
     {type:'image_url',image_url:{url:dataUrl}}
   ]};
   callM('gpt',[msg],'你是讨论中的最高权限 AI GPT-5.6，负责读图并把图片内容转化为对当前讨论的评估意见——支持/反驳/补充/提出新问题，推动讨论前进。').then(function(txt){
-    // 清理缩略图提示，用正式消息替代
+    // 把缩略图合并到结果消息里（不删除，让用户看到图片 + 识别结果对照）
     pv.remove();
-    // 以"图片分析（GPT-5.6）"消息写入讨论 + 注入 dLog 让所有 AI 可见
+    // 以"图片分析（GPT-5.6）"消息写入讨论，包含图片缩略图 + 识别文字
     addDiscImgMsg(txt, dataUrl);
     dLog.push({role:'img',model:'gpt',action:'图片识别',content:txt,round:dRnd});
     addHostMsg('✅ 图片识别完成，已把图片内容整理进讨论，继续推进下一轮…');
@@ -2056,22 +2056,24 @@ function discImgAnalyze(dataUrl){
     setCtrl(true);
     setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },600);
   }).catch(function(err){
-    pv.remove();
-    if(err.name!=='AbortError'){addHostMsg('⚠ 图片识别失败：'+err.message);toast('图片识别失败：'+err.message,'er');}
-  });
-}
-// 图片分析结果专用消息气泡（带小缩略图 + 可全屏 + 可播报）
-function addDiscImgMsg(text,dataUrl){
-  var c=document.getElementById('discMsgs');
-  var info=MI.gpt;
-  var d=document.createElement('div'); d.className='mg2';
-  d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● 📷 '+info.name+' 图片识别</span>'
-    +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 图片识别\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
-    +'<div class="mb fm-gpt"><div class="bt">'+esc(text)+'</div>'
-    +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
-  c.appendChild(d); scrollC(c);
-  lastHost=null;
-}
+      pv.remove();
+      if(err.name!=='AbortError'){addHostMsg('⚠ 图片识别失败：'+err.message);toast('图片识别失败：'+err.message,'er');}
+    });
+  }
+  // 图片分析结果专用消息气泡（带小缩略图 + 可全屏 + 可播报）
+  function addDiscImgMsg(text,dataUrl){
+    var c=document.getElementById('discMsgs');
+    var info=MI.gpt;
+    var d=document.createElement('div'); d.className='mg2';
+    d.innerHTML='<div class="ml" style="color:'+info.color+'"><span>● 📷 '+info.name+' 图片识别</span>'
+      +'<button class="spkb" onclick="viewMax(\''+escA(text)+'\',\''+escA(info.name)+' 图片识别\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
+      +'<div class="mb fm-gpt">'
+      +(dataUrl?'<img src="'+dataUrl+'" style="max-width:220px;max-height:160px;border-radius:10px;border:1px solid var(--bd);margin-bottom:8px">':'')
+      +'<div class="bt">'+esc(text)+'</div>'
+      +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(text)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
+    c.appendChild(d); scrollC(c);
+    lastHost=null;
+  }
 
 // ════ FOLDER → DISCUSSION ════
 // 用户给一个文件夹路径（电脑/手机选文件夹），程序读取里面所有可读文件，
