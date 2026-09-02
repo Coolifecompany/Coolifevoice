@@ -528,13 +528,13 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
           <div class="mg" id="gTrans"></div>
           <div class="slbl">语音识别方式</div>
           <div class="rmr">
-            <div class="rmb active" id="srBrowser" onclick="selSrMode('browser')">
-              <span class="rmi">🌐</span><span class="rmn">浏览器识别</span><span class="rmd">免配置 · Chrome/Edge</span>
-            </div>
-            <div class="rmb" id="srWhisper" onclick="selSrMode('whisper')">
-              <span class="rmi">🎧</span><span class="rmn">Whisper API</span><span class="rmd">泰语识别更精准</span>
-            </div>
-          </div>
+                      <div class="rmb" id="srBrowser" onclick="selSrMode('browser')">
+                        <span class="rmi">🌐</span><span class="rmn">浏览器识别</span><span class="rmd">免配置 · Chrome/Edge</span>
+                      </div>
+                      <div class="rmb active tl" id="srWhisper" onclick="selSrMode('whisper')">
+                        <span class="rmi">🎧</span><span class="rmn">Whisper API</span><span class="rmd">泰语识别更精准</span>
+                      </div>
+                    </div>
         </div>
         <button class="stbtn" onclick="handleStart()">开始 →</button>
         <div class="stnote">需配置 API Key · 1对1 至少 1 个模型 · 多AI至少 2 个 · 中泰互译选 1 个</div>
@@ -794,7 +794,7 @@ var MI = {
 var MODELS = ['gpt','gemini','opus','deepseek','sonnet','gptmini','ds32'];
 
 var cfg = {
-  gpt:      {key:'', url:'https://xyuapi.top/v1',  model:'gpt-5.4-pro-thinking'},
+  gpt:      {key:'', url:'https://xyuapi.top/v1',  model:'gpt-5.6-sol'},
   gemini:   {key:'', url:'https://xyuapi.top/v1',  model:'gemini-3.1-pro-preview'},
   opus:     {key:'', url:'https://xyuapi.top/v1',  model:'claude-opus-4-6-thinking'},
   deepseek: {key:'', url:'https://xyuapi.top/v1',  model:'deepseek-v3.2-thinking'},
@@ -802,6 +802,10 @@ var cfg = {
   gptmini:  {key:'', url:'https://poloai.top/v1',  model:'gpt-5-mini'},
   ds32:     {key:'', url:'https://poloai.top/v1',  model:'deepseek-v3.2'}
 };
+
+// 写死的 GPT 模型（隐藏且不可改）
+var FIXED_MODEL = 'gpt';
+function fixedGptCfg(){ return {key:'', url:'https://xyuapi.top/v1', model:'gpt-5.6-sol'}; }
 
 // ════ APP STATE ════
 var appMode = '1v1';
@@ -824,7 +828,7 @@ var thinkIdx=0;
 
 // Translation state
 var selTrans = 'gptmini';      // model for translation
-var srMode = 'browser';        // 'browser' | 'whisper'
+var srMode = 'whisper';        // 'browser' | 'whisper'
 var trSt = 'idle';             // idle | recording | processing | speaking
 var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
@@ -2176,6 +2180,7 @@ function callMStream(model, messages, sysPrompt, onDelta) {
 function buildCfgModal(){
   var html='';
   MODELS.forEach(function(k){
+    if(k===FIXED_MODEL) return;   // 固定模型不在设置中显示
     var info=MI[k];
     html+='<div class="mdsec"><div class="mdst">'+info.name+'</div><div class="fg">'
       +'<div class="fl">API Key</div><input class="mi" type="password" id="ci-'+k+'-k" placeholder="sk-..." value="'+escA(cfg[k].key)+'">'
@@ -2183,30 +2188,23 @@ function buildCfgModal(){
       +'<div class="fl">模型名称</div><input class="mi" type="text" id="ci-'+k+'-m" value="'+escA(cfg[k].model)+'">'
       +'</div></div>';
   });
-  // Whisper config
-  html+='<div class="mdsec" style="border-top:1px solid var(--bd);padding-top:14px;margin-top:8px"><div class="mdst" style="color:var(--dg)">🎧 Whisper 语音识别（中泰互译可选）</div><div class="fg">'
-    +'<div class="fl">API Key</div><input class="mi" type="password" id="ci-wh-k" placeholder="sk-..." value="'+escA(whisperCfg.key)+'">'
-    +'<div class="fl">API 地址</div><input class="mi" type="text" id="ci-wh-u" value="'+escA(whisperCfg.url)+'">'
-    +'<div class="fl">模型名称</div><input class="mi" type="text" id="ci-wh-m" value="'+escA(whisperCfg.model)+'">'
-    +'</div></div>';
+  // Whisper config: 固定内置，不在设置中显示
   document.getElementById('cfgBody').innerHTML=html;
 }
 function openCfg(){buildCfgModal();document.getElementById('cfgMo').classList.add('open');}
 function closeCfg(){document.getElementById('cfgMo').classList.remove('open');}
 function saveCfg(){
   MODELS.forEach(function(k){
+    if(k===FIXED_MODEL) return;   // 固定模型不保存
     cfg[k].key  =(document.getElementById('ci-'+k+'-k')||{}).value||'';
     cfg[k].url  =(document.getElementById('ci-'+k+'-u')||{}).value||'';
     cfg[k].model=(document.getElementById('ci-'+k+'-m')||{}).value||'';
     cfg[k].key=cfg[k].key.trim(); cfg[k].url=cfg[k].url.trim(); cfg[k].model=cfg[k].model.trim();
   });
-  // Whisper
-  whisperCfg.key  =((document.getElementById('ci-wh-k')||{}).value||'').trim();
-  whisperCfg.url  =((document.getElementById('ci-wh-u')||{}).value||'').trim();
-  whisperCfg.model=((document.getElementById('ci-wh-m')||{}).value||'').trim();
+  // Whisper: 固定内置，不在设置中显示/保存
   saveCfgLS(); closeCfg(); toast('✓ 配置已保存','ok');
 }
-function loadCfg(){try{var s=localStorage.getItem('cvo2_cfg');if(s){var p=JSON.parse(s);MODELS.forEach(function(k){if(p[k])Object.assign(cfg[k],p[k]);});if(p._whisper){Object.keys(p._whisper).forEach(function(k){if(p._whisper[k])whisperCfg[k]=p._whisper[k];});}}}catch(e){}}
+function loadCfg(){try{var s=localStorage.getItem('cvo2_cfg');if(s){var p=JSON.parse(s);MODELS.forEach(function(k){if(k===FIXED_MODEL)return;if(p[k])Object.assign(cfg[k],p[k]);});}}catch(e){}}
 function saveCfgLS(){try{var d=JSON.parse(JSON.stringify(cfg));d._whisper=whisperCfg;localStorage.setItem('cvo2_cfg',JSON.stringify(d));}catch(e){}}
 
 // ════ UTILS ════
