@@ -439,35 +439,50 @@ header{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:
 }
 /* ── MOBILE: compact translation screen ── */
 @media(max-width:768px){
-  /* slimmer header on phones: save vertical space */
-  header{height:44px;padding:0 10px}
-  .logo{font-size:14px;gap:6px}
-  .lm{width:24px;height:24px;font-size:11px;border-radius:7px}
-  .hbadge{font-size:9px;padding:3px 7px}
-  main{margin-top:44px!important}
-  /* slim one-row translation bar: drop direction label + sub info, keep essentials */
-  .trbar{height:44px;padding:0 12px;gap:8px}
-  .trav{width:28px;height:28px;font-size:13px;border-radius:8px}
-  .trn{font-size:10px}
-  .trtag{font-size:8px;padding:1px 5px}
+  /* 1. Ultra-compact header: merge with trbar functionally */
+  header{height:40px;padding:0 10px;z-index:101}
+  .logo{font-size:13px;gap:5px}
+  .lm{width:22px;height:22px;font-size:10px;border-radius:6px}
+  .hbadge{font-size:8px;padding:2px 6px;border-radius:4px}
+  main{margin-top:40px!important}
+  /* 2. trbar → single slim row (36px), no redundant info */
+  .trbar{height:36px;padding:0 8px;gap:5px;background:rgba(0,0,0,.15);border-bottom-color:var(--bd)}
+  .trav{display:none}
+  .trinfo{flex:none;min-width:0}
+  .trn{font-size:9px;line-height:1}
+  .trtag{font-size:7px;padding:1px 4px;border-radius:3px}
   .trsub{display:none}
   .tr-dir{display:none}
-  .rmr{gap:3px}
-  .rmb{min-width:auto;padding:4px 7px;display:inline-flex;flex-direction:row;align-items:center;gap:3px;border-radius:7px;font-size:9px}
-  .rmb .rmn{font-size:9px;display:inline}
-  .rmb .rmi{font-size:12px;display:inline;margin:0}
-  .pab{padding:5px 8px;font-size:10px}
-  /* input bar compact */
-  .ia{padding:7px 10px 8px}
-  .iw{min-height:38px;padding:3px}
-  .iw textarea{font-size:15px;padding:7px 6px}
-  .micb,.sbtn2,.stopb{width:32px;height:32px}
-  .im{font-size:9px;margin-top:3px}
-  /* bubbles compact */
-  .trmsgs{padding:11px;gap:12px}
-  .tr-src,.tr-dst{font-size:14px;max-width:92%}
-  /* hide the "0 条翻译" counter on very narrow screens to save a line */
+  /* 3. Mode buttons: inline tiny pills */
+  .rmr{display:flex;gap:3px;flex:none}
+  .rmb{min-width:auto;padding:3px 6px;display:inline-flex;flex-direction:row;align-items:center;gap:3px;border-radius:5px;font-size:8px;line-height:1}
+  .rmb .rmn{font-size:8px;display:inline}
+  .rmb .rmi{font-size:10px;display:inline;margin:0}
+  .pab{padding:3px 6px;font-size:8px;border-radius:5px}
+  /* 4. Input bar compact */
+  .ia{padding:5px 8px 6px;border-top-color:var(--bd)}
+  .iw{min-height:36px;padding:2px 2px 2px 8px;border-radius:10px}
+  .iw textarea{font-size:16px;padding:5px 4px}
+  .micb,.sbtn2,.stopb{width:30px;height:30px;border-radius:7px}
+  .micb svg,.sbtn2 svg{width:16px;height:16px}
+  .im{font-size:9px;margin-top:2px;flex-wrap:wrap;gap:2px}
   #trCnt{display:none}
+  /* 5. bubbles compact */
+  .trmsgs{padding:8px;gap:10px}
+  .tr-src,.tr-dst{font-size:14px;max-width:92%;padding:8px 11px}
+  .tr-src{padding:8px 11px;border-radius:10px 10px 3px 10px}
+  .tr-dst{padding:9px 12px;border-radius:3px 10px 10px 10px}
+  .tr-lbl{font-size:9px;margin-top:3px}
+  .tr-spk{font-size:11px}
+  /* 6. Empty state: smaller */
+  .tr-emp{gap:6px}
+  .tr-emp .emp-i{font-size:28px}
+  .tr-emp .emp-t{font-size:14px}
+  .tr-emp .emp-s{font-size:11px}
+  /* 7. Hide other unused elements */
+  .bnav{display:none!important}
+  .fab-voice{display:none!important}
+  .layout{margin-bottom:0}
 }
 @media(min-width:769px){.bnav{display:none!important}.fab-voice{display:none!important}}
 ::-webkit-scrollbar{width:5px;height:5px}
