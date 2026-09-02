@@ -260,6 +260,19 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 .cbt2 .ci{font-size:14px}
 .cbt2:hover{border-color:var(--bd2);color:var(--tx)}
 .cbt2.pri{border-color:var(--ac);color:var(--acb);background:rgba(108,92,231,.1)}
+/* 讨论中用户发言输入条 */
+.dui{display:flex;gap:8px;align-items:flex-end;padding:10px 18px;background:rgba(8,8,16,.85);backdrop-filter:blur(20px);border-top:1px solid var(--bd);flex-shrink:0}
+.dui textarea{background:var(--sf);border:1px solid var(--bd);border-radius:12px;color:var(--tx);padding:10px 14px;font-family:inherit;font-size:13px;line-height:1.5;resize:none;outline:none;max-height:110px}
+.dui textarea:focus{border-color:var(--ac)}
+.dui .sbtn2{background:var(--ac);border:none;border-radius:12px;width:40px;height:40px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff}
+.dui .sbtn2:hover{background:var(--ac2)}
+/* 用户发言消息（右对齐） */
+.mg2.um{align-self:flex-end;max-width:85%}
+.mg2.um .ml{justify-content:flex-end}
+@media(max-width:768px){
+  .mg2.um{max-width:92%}
+  .dui{padding:8px 10px}
+}
 .cbt2.tl{border-color:var(--tl);color:var(--tl);background:rgba(0,212,170,.08)}
 .cbt2.dg{border-color:var(--dg);color:var(--dg);background:rgba(255,107,138,.08)}
 .cbt2:disabled{opacity:.35;cursor:not-allowed}
@@ -713,14 +726,22 @@ body.dmax #discSc .dms{flex:1;min-height:0}
         <span class="rpl" id="rpSub" style="margin-left:7px">每 3 轮触发</span>
       </div>
       <div class="dms" id="discMsgs"></div>
-      <div class="cb">
-        <button class="cbt2 pri" id="ctCont" onclick="contDisc()"><span class="ci">▶</span><span>继续</span></button>
-        <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
-        <button class="cbt2" id="ctFile" onclick="discInsertFolder()" title="扫描文件夹，勾选文件后GPT读取并结合当前话题继续讨论"><span class="ci">📄</span><span>读文件</span></button>
-        <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
-        <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
-        <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
-      </div>
+            <!-- 用户中途参与讨论：输入观点 → AI 回应 -->
+            <div class="dui" id="discUserInput" style="display:none">
+              <textarea id="discUserTxt" rows="1" placeholder="输入你的观点/问题，插入到讨论中…（Enter 发送，Shift+Enter 换行）" onkeydown="discUserKey(event)" oninput="resize(this)" style="flex:1;min-width:0"></textarea>
+              <button class="sbtn2" id="discUserSend" onclick="discUserSay()" title="发送并让所有 AI 回应">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+            <div class="cb">
+              <button class="cbt2 pri" id="ctCont" onclick="contDisc()"><span class="ci">▶</span><span>继续</span></button>
+              <button class="cbt2" id="ctSay" onclick="discUserToggle()" title="输入你的观点，插入到讨论中让所有 AI 回应"><span class="ci">💬</span><span>发言</span></button>
+              <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
+              <button class="cbt2" id="ctFile" onclick="discInsertFolder()" title="扫描文件夹，勾选文件后GPT读取并结合当前话题继续讨论"><span class="ci">📄</span><span>读文件</span></button>
+              <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
+              <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
+              <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
+            </div>
     </div>
 
     <!-- SUMMARY -->
@@ -1631,9 +1652,17 @@ function runRevsTurn() {
 function runGuestTurn(isFollowUp) {
   var tid=addDiscThink(dGuest,true);
   var ctx=buildCtx();
-  var prompt=!isFollowUp
-    ?'讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径'
-    :'讨论话题:"'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请回应评议观点：回应有效反对，说明采纳的修正，维护未被驳倒的立场。';
+  // 检测是否有用户发言，若有则嘉宾需优先回应用户
+  var userLast=null;
+  for(var i=dLog.length-1;i>=0;i--){if(dLog[i].role==='user'){userLast=dLog[i].content;break;}}
+  var prompt;
+  if(!isFollowUp){
+    prompt='讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
+  }else if(userLast){
+    prompt='讨论话题:"'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n用户刚刚插入了观点："'+userLast+'"\n请作为首席嘉宾首先明确回应这位用户的观点（赞同/部分赞同/反对，说明理由），然后继续推进讨论。';
+  }else{
+    prompt='讨论话题:"'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请回应评议观点：回应有效反对，说明采纳的修正，维护未被驳倒的立场。';
+  }
   var sys='你是'+MI[dGuest].name+'，本次首席嘉宾，专长：'+MI[dGuest].role+'。';
   return callM(dGuest,[{role:'user',content:prompt}],sys).then(function(r){
     rmEl(tid); addDiscGuestMsg(dGuest,r,isFollowUp);
@@ -1646,7 +1675,15 @@ function runGuestTurn(isFollowUp) {
 function runReviewerTurn(rev) {
   var tid=addDiscThink(rev,false);
   var ctx=buildCtx();
-  var prompt='讨论话题:"'+dTopic+'"\n\n记录：\n'+ctx+'\n\n请对嘉宾'+MI[dGuest].name+'的观点评议。\n只能选4种之一：\n[补充] 对某论点补充\n[质疑] 对某论点质疑\n[反对] 明确反对某论点\n[修正] 指出并修正错误\n\n发言必须以操作类型开头，针对嘉宾具体论点。';
+  // 检测是否有用户发言
+  var userLast=null;
+  for(var i=dLog.length-1;i>=0;i--){if(dLog[i].role==='user'){userLast=dLog[i].content;break;}}
+  var prompt;
+  if(userLast){
+    prompt='讨论话题:"'+dTopic+'"\n\n记录：\n'+ctx+'\n\n用户刚刚插入了观点："'+userLast+'"\n请从你的专业角度评议这个用户观点（补充/质疑/反对/修正），然后可顺带评议嘉宾'+MI[dGuest].name+'的观点。\n只能选4种之一：\n[补充] 对某论点补充\n[质疑] 对某论点质疑\n[反对] 明确反对某论点\n[修正] 指出并修正错误\n\n发言必须以操作类型开头。';
+  }else{
+    prompt='讨论话题:"'+dTopic+'"\n\n记录：\n'+ctx+'\n\n请对嘉宾'+MI[dGuest].name+'的观点评议。\n只能选4种之一：\n[补充] 对某论点补充\n[质疑] 对某论点质疑\n[反对] 明确反对某论点\n[修正] 指出并修正错误\n\n发言必须以操作类型开头，针对嘉宾具体论点。';
+  }
   var sys='你是'+MI[rev].name+'，评议AI，专长：'+MI[rev].role+'。必须围绕嘉宾观点，不可独立发挥。';
   return callM(rev,[{role:'user',content:prompt}],sys).then(function(r){
     rmEl(tid); var ac=parseAc(r); addDiscRevMsg(rev,r,ac);
@@ -1673,6 +1710,7 @@ function buildCtx() {
     var r;
     if(e.role==='guest')r='嘉宾'+n+'('+e.action+')';
     else if(e.role==='img')r='📷 用户插图·'+n+'识别';
+    else if(e.role==='user')r='🧑 用户发言';
     else r='评议'+n+'('+e.action+')';
     return '【第'+e.round+'轮·'+r+'】\n'+e.content;
   }).join('\n\n---\n\n');
@@ -1780,6 +1818,41 @@ function addHostMsg(text){
   var d=document.createElement('div'); d.className='hm';
   d.innerHTML='<div class="hp">🎙</div><div class="hb">'+esc(text)+'</div>';
   c.appendChild(d); lastHost=d; scrollC(c);
+}
+// ════ 用户中途参与讨论 ════
+function discUserToggle(){
+  var box=document.getElementById('discUserInput');
+  var show=box.style.display!=='flex';
+  box.style.display=show?'flex':'none';
+  if(show){var ta=document.getElementById('discUserTxt');ta.focus();}
+  var btn=document.getElementById('ctSay');
+  btn.classList.toggle('aon',show);
+}
+function discUserKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();discUserSay();}
+}
+function discUserSay(){
+  if(!dRun){toast('请先开始讨论','er');return;}
+  var ta=document.getElementById('discUserTxt');
+  var txt=(ta.value||'').trim();
+  if(!txt){toast('请输入你的观点','er');return;}
+  ta.value='';
+  resize(ta);
+  // 用户消息气泡（右侧，可全屏可播报）
+  var c=document.getElementById('discMsgs');
+  var d=document.createElement('div'); d.className='mg2 um';
+  d.innerHTML='<div class="ml" style="color:var(--acb)"><span>● 🧑 你（用户）</span>'
+    +'<button class="spkb" onclick="viewMax(\''+escA(txt)+'\',\'你的发言\')" style="margin-left:auto" title="全屏查看"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 4 20 10 20"/><polyline points="20 10 20 4 14 4"/><line x1="14" y1="10" x2="20" y2="4"/><line x1="4" y1="20" x2="10" y2="14"/></svg></button></div>'
+    +'<div class="mb" style="background:rgba(108,92,231,.12);border-color:var(--ac)"><div class="bt">'+esc(txt)+'</div>'
+    +'<div class="dspk"><button class="spkb" onclick="tts(this.getAttribute(\'data-t\'))" data-t="'+escA(txt)+'" title="播报这条"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg><span>播报</span></button></div></div>';
+  c.appendChild(d); scrollC(c);
+  // 写入 dLog，让所有 AI 都能看到用户的观点
+  dLog.push({role:'user',model:'me',action:'发言',content:txt,round:dRnd});
+  addHostMsg('💬 你加入了讨论，AI 正在回应你的观点…');
+  // 自动触发下一轮：所有 AI（嘉宾+评议）针对用户观点继续
+  dStop=false;
+  setCtrl(true);
+  setTimeout(function(){ if(!dStop) runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); },600);
 }
 function rmLastHost(){if(lastHost){lastHost.remove();lastHost=null;}}
 function addRndHdr(n){
