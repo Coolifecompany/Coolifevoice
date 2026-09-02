@@ -2404,18 +2404,41 @@ function addFolderMsg(model,text){
   }
 
 // ════ FULLSCREEN CONTENT OVERLAY ════
-function viewMax(content, title){
+function viewMax(content, title, isHtml){
   var o=document.getElementById('maxOverlay');
   if(!o){
     var d=document.createElement('div'); d.id='maxOverlay';
-    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><div style="display:flex;gap:6px;align-items:center"><button class="mdc" onclick="speakMax()" title="播报当前内容" style="font-size:14px;padding:3px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--tl);font-family:\'IBM Plex Mono\',monospace">🔊 播报</button><button class="mdc" onclick="closeMax()">✕</button></div></div><div class="maxbody" id="maxBody"></div></div>';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><div style="display:flex;gap:6px;align-items:center">'
+      +'<button class="mdc" onclick="maxZoom(-1)" title="缩小字号" style="font-size:13px;padding:2px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--txd);font-family:\'IBM Plex Mono\',monospace">A−</button>'
+      +'<span id="maxZoomLab" style="font-size:11px;color:var(--txm);font-family:\'IBM Plex Mono\',monospace;min-width:22px;text-align:center">16</span>'
+      +'<button class="mdc" onclick="maxZoom(1)" title="放大字号" style="font-size:13px;padding:2px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--txd);font-family:\'IBM Plex Mono\',monospace">A+</button>'
+      +'<button class="mdc" onclick="speakMax()" title="播报当前内容" style="font-size:13px;padding:3px 8px;border:1px solid var(--bd);border-radius:6px;color:var(--tl);font-family:\'IBM Plex Mono\',monospace">🔊 播报</button>'
+      +'<button class="mdc" onclick="closeMax()">✕</button></div></div><div class="maxbody" id="maxBody"></div></div>';
     document.body.appendChild(d); o=d;
   }
   o.style.display='flex';
   o.setAttribute('data-content',content);
   document.getElementById('maxTitle').textContent=title||'内容';
-  document.getElementById('maxBody').innerHTML='<div style="white-space:pre-wrap;word-break:break-word;line-height:1.8;font-size:15px;padding:4px 0">'+esc(content)+'</div>';
+  document.getElementById('maxBody').innerHTML='<div class="maxCnt" style="white-space:pre-wrap;word-break:break-word;line-height:1.9;font-size:16px;padding:4px 0">'+(isHtml?content:esc(content))+'</div>';
+  var z=parseInt(localStorage.getItem('cvo_max_zoom')||'16',10);
+  if(isNaN(z)||z<13||z>28)z=16;
+  applyMaxZoom(z);
   var b=document.getElementById('maxBody'); if(b)b.scrollTop=0;
+}
+function maxZoom(delta){
+  var z=parseInt(localStorage.getItem('cvo_max_zoom')||'16',10);
+  if(isNaN(z))z=16;
+  z=Math.min(28,Math.max(13,z+delta));
+  localStorage.setItem('cvo_max_zoom',String(z));
+  applyMaxZoom(z);
+}
+function applyMaxZoom(z){
+  var el=document.getElementById('maxBody');
+  if(!el)return;
+  var cnt=el.querySelector('.maxCnt');
+  if(cnt)cnt.style.fontSize=z+'px';
+  var lab=document.getElementById('maxZoomLab');
+  if(lab)lab.textContent=z;
 }
 function speakMax(){
   var o=document.getElementById('maxOverlay');
@@ -2496,27 +2519,27 @@ function histOpen(i){
   }
   var h=getHist(); var it=h[i];
   if(!it)return;
-  // 全屏回看完整讨论：报告 + 发言记录
+  // 全屏回看完整讨论：报告 + 发言记录（字号用 em，跟随全屏 A-/A+ 缩放）
   var html='';
-  html+='<div style="font-size:18px;font-weight:700;margin-bottom:6px">🎯 '+esc(it.topic||'未命名')+'</div>';
-  html+='<div style="font-size:13px;color:var(--txm);margin-bottom:14px">🕒 '+it.time+' · 主导 '+esc(it.guest||'—')+' · '+it.rounds+'轮 · '+it.talks+'条 · 参与 '+esc(it.models||'—')+'</div>';
+  html+='<div style="font-size:1.25em;font-weight:700;margin-bottom:6px">🎯 '+esc(it.topic||'未命名')+'</div>';
+  html+='<div style="font-size:0.85em;color:var(--txm);margin-bottom:14px">🕒 '+it.time+' · 主导 '+esc(it.guest||'—')+' · '+it.rounds+'轮 · '+it.talks+'条 · 参与 '+esc(it.models||'—')+'</div>';
   if(it.report){
-    html+='<div class="mdst" style="font-size:12px;margin-bottom:6px;margin-top:8px">最终报告</div>';
-    html+='<div style="font-size:16px;line-height:1.9;white-space:pre-wrap;word-break:break-word;background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:18px">'+esc(it.report)+'</div>';
+    html+='<div class="mdst" style="font-size:0.8em;margin-bottom:6px;margin-top:8px">最终报告</div>';
+    html+='<div style="font-size:1em;line-height:1.9;white-space:pre-wrap;word-break:break-word;background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:18px">'+esc(it.report)+'</div>';
   }
   if(it.log&&it.log.length){
-    html+='<div class="mdst" style="font-size:12px;margin-bottom:8px">讨论过程</div>';
+    html+='<div class="mdst" style="font-size:0.8em;margin-bottom:8px">讨论过程</div>';
     html+=it.log.map(function(e){
       var n=MI[e.model]?MI[e.model].name:e.model;
       var tag=e.role==='guest'?'嘉宾':(e.role==='img'?'📷 插图':(e.role==='reviewer'?'评议':''));
       return '<div style="border-left:3px solid var(--bd);padding:4px 0 4px 12px;margin:8px 0">'
-        +'<div style="font-size:12px;color:var(--txm)">第'+e.r+'轮 · '+(tag||'')+' '+esc(n)+' · '+esc(e.action||'')+'</div>'
-        +'<div style="font-size:15px;color:var(--tx);line-height:1.8;white-space:pre-wrap;word-break:break-word;margin-top:2px">'+esc(e.content||'')+'</div>'
+        +'<div style="font-size:0.8em;color:var(--txm)">第'+e.r+'轮 · '+(tag||'')+' '+esc(n)+' · '+esc(e.action||'')+'</div>'
+        +'<div style="font-size:0.95em;color:var(--tx);line-height:1.8;white-space:pre-wrap;word-break:break-word;margin-top:2px">'+esc(e.content||'')+'</div>'
         +'</div>';
     }).join('');
   }
   html+='</div>';
-  viewMax(html, '📚 讨论回看 · '+esc(it.topic));
+  viewMax(html, '📚 讨论回看 · '+esc(it.topic), true);
 }
 // 单选/多选删除模式
 function histSelectMode(){
