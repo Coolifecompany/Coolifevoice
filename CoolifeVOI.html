@@ -994,13 +994,31 @@ function paperModal(){
 }
 
 function buildPaperHtml(t){
+  var ml=MODELS.map(function(m){
+    return '<label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--sf);font-size:12px">'
+      +'<input type="radio" name="paperModel" value="'+m+'" '+(m==='gpt'?'checked':'')+' style="accent-color:var(--ac);margin:0">'
+      +'<span style="color:'+MI[m].color+';font-weight:600">'+MI[m].name+'</span>'
+      +'</label>';
+  }).join('');
   return '<div class="pf">'
-    +'<div class="prow" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">'
-    +'<input class="tinp" id="paperQ" value="'+escA(t)+'" placeholder="输入检索关键词/话题…" style="flex:1;min-width:0" onkeydown="if(event.key===\'Enter\')paperSearch()">'
-    +'<button class="sbtn2" onclick="paperSearch()" style="white-space:nowrap">🔍 检索</button>'
+    +'<div class="prow" style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">'
+    +'<input class="tinp" id="paperQ" value="'+escA(t)+'" placeholder="输入检索关键词/话题…" style="flex:1;min-width:0;font-size:13px" onkeydown="if(event.key===\'Enter\')paperSearch()">'
+    +'<button class="sbtn2" onclick="paperSearch()" style="white-space:nowrap;font-size:12px;padding:8px 14px">🔍 检索</button>'
     +'</div>'
-    +'<div id="paperBody" style="max-height:340px;overflow-y:auto;font-size:13px;line-height:1.7">'
-    +'<div style="color:var(--txm);padding:20px 0;text-align:center">输入话题后点击"检索"，自动从 OpenAlex / arXiv 公开学术 API 获取论文。</div>'
+    +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;font-size:11px;color:var(--txm)">'
+    +'<label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="paperSrc" value="openalex" checked style="accent-color:var(--ac)"> OpenAlex</label>'
+    +'<label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="paperSrc" value="arxiv" checked style="accent-color:var(--ac)"> arXiv</label>'
+    +'<label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="paperSrc" value="stack" style="accent-color:var(--ac)"> Stack+Mechanics</label>'
+    +'<label style="display:flex;align-items:center;gap:3px;cursor:pointer"><input type="checkbox" class="paperSrc" value="nhtsa" style="accent-color:var(--ac)"> NHTSA</label>'
+    +'</div>'
+    +'<div id="paperBody" style="max-height:300px;overflow-y:auto;font-size:13px;line-height:1.7">'
+    +'<div style="color:var(--txm);padding:16px 0;text-align:center">输入话题后点击"检索"，多源并行获取学术论文与汽车知识。</div>'
+    +'</div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--bd);flex-wrap:wrap">'
+    +'<span style="font-size:11px;color:var(--txm);font-weight:600">🧠 阅读模型</span>'
+    +ml
+    +'<span style="flex:1"></span>'
+    +'<button class="sbtn2" onclick="paperRefine()" style="white-space:nowrap;font-size:12px;padding:6px 12px">📖 阅读并提炼</button>'
     +'</div>'
     +'</div>';
 }
@@ -1009,26 +1027,78 @@ function paperSearch(){
   var q=document.getElementById('paperQ').value.trim();
   if(!q){toast('请输入检索词','er');return;}
   var body=document.getElementById('paperBody');
-  body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">⏳ 正在检索公开学术库…</div>';
-  // 多源并行：OpenAlex 主查 + arXiv 补充
-  Promise.all([
-    paperSearchOpenAlex(q),
-    paperSearchArxiv(q)
-  ]).then(function(res){
-    var papers=[].concat(res[0], res[1]);
+  // 读取勾选的平台源
+  var srcs=[];
+  document.querySelectorAll('.paperSrc').forEach(function(cb){ if(cb.checked) srcs.push(cb.value); });
+  if(!srcs.length){toast('请至少选择一个平台','er');return;}
+  body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">⏳ 正在检索：'+srcs.map(function(s){return {openalex:'OpenAlex',arxiv:'arXiv',stack:'Stack+Mechanics',nhtsa:'NHTSA'}[s];}).join(' + ')+' …</div>';
+  // 按勾选源并行检索
+  var jobs=[];
+  if(srcs.indexOf('openalex')>=0)jobs.push(paperSearchOpenAlex(q));
+  if(srcs.indexOf('arxiv')>=0)jobs.push(paperSearchArxiv(q));
+  if(srcs.indexOf('stack')>=0)jobs.push(paperSearchStack(q));
+  if(srcs.indexOf('nhtsa')>=0)jobs.push(paperSearchNhtsa(q));
+  Promise.all(jobs).then(function(res){
+    var papers=[].concat.apply([], res);
     paperCache[q]=papers;
     if(!papers.length){
-      body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">没有找到相关论文，换个关键词试试。</div>';
+      body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">没有找到相关结果，换个关键词试试。</div>';
       return;
     }
     paperData={q:q, papers:papers};
     renderPaperList(body, papers);
-    toast('找到 '+papers.length+' 篇相关论文','ok');
+    toast('找到 '+papers.length+' 条相关结果','ok');
   }).catch(function(err){
     console.error('paper search error:', err);
     body.innerHTML='<div style="color:var(--ter);padding:20px 0;text-align:center">检索失败：'+esc(err.message)+'<br>（公开 API 可能需要网络连接，可重试）</div>';
   });
 }
+
+// Stack Exchange (Mechanics): 汽车维修/诊断问答
+function paperSearchStack(q){
+  var url='https://api.stackexchange.com/2.3/search/advanced?site=mechanics&order=desc&sort=relevance&q='+encodeURIComponent(q)+'&pagesize=5&filter=default';
+  return fetch(url)
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('Stack HTTP '+r.status)); })
+    .then(function(d){
+      return (d.items||[]).map(function(it){
+        return {
+          title: it.title||'(无标题)',
+          authors: (it.owner&&it.owner.display_name)||'社区',
+          year: new Date(it.creation_date*1000).getFullYear(),
+          venue: 'Mechanics SE',
+          abstract: stripHtml(it.body_markdown||it.title||'').slice(0,400),
+          doi: '',
+          url: it.link||'',
+          src: 'Mechanics'
+        };
+      });
+    });
+}
+
+// NHTSA: 美国国家公路交通安全管理局（召回/安全评级）
+function paperSearchNhtsa(q){
+  // 用关键词查召回信息
+  var url='https://api.nhtsa.gov/recalls?query='+encodeURIComponent(q)+'&format=json';
+  return fetch(url)
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('NHTSA HTTP '+r.status)); })
+    .then(function(d){
+      var rows=(d.results||[]).slice(0,5).map(function(r){
+        var t=r.component||r.recall_component||'';
+        return {
+          title: (r.manufacturer||'')+' 召回：'+(t||q),
+          authors: (r.manufacturer||'')+' / NHTSA',
+          year: (r.recall_date||'').slice(0,4)||'',
+          venue: 'NHTSA 召回',
+          abstract: stripHtml((r.summary||r.consequence||'')).slice(0,400),
+          doi: '',
+          url: 'https://www.nhtsa.gov/recalls?nhtsaId='+(r.nhtsa_campaign_number||''),
+          src: 'NHTSA'
+        };
+      });
+      return rows;
+    });
+}
+function stripHtml(s){ var d=document.createElement('div'); d.innerHTML=String(s||''); return d.textContent||''; }
 
 // OpenAlex：开放学术库，免费无限制
 function paperSearchOpenAlex(q){
@@ -1134,6 +1204,69 @@ function paperUse(inject){
     discUserTxtSet(txt); closeMax();
   }
 }
+
+// 📖 阅读并提炼：勾选论文 → 指定模型精读摘要 → 提炼核心文案（可注入/可保存）
+function paperRefine(){
+  var ps=paperSelected();
+  if(!ps.length){toast('请先勾选论文','er');return;}
+  var model='gpt';
+  var mr=document.querySelector('input[name="paperModel"]:checked');
+  if(mr) model=mr.value;
+  if(!cfg[model]||!cfg[model].key){toast((MI[model]?MI[model].name:model)+' 未配置 API Key','er');return;}
+  var body=document.getElementById('paperBody');
+  var prev=body.innerHTML;
+  body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">⏳ '+MI[model].name+' 正在精读 '+ps.length+' 篇资料并提炼…</div>';
+  // 组装资料原文
+  var src='';
+  ps.forEach(function(p,i){
+    src+='【资料'+(i+1)+'】《'+p.title+'》\n  来源：'+(p.venue||p.src||'')+' · '+p.year+'年\n  摘要：'+(p.abstract||'无')+'\n\n';
+  });
+  var sys='你是资料精读专家'+MI[model].name+'。请通读以下资料，提炼出与检索话题最相关的核心论点、数据与结论，用中文输出结构化文案。要求：1) 只输出精炼要点，不重复摘要全文；2) 标注每条要点对应的资料编号；3) 结尾给出2-3条可直接引用的关键数据/结论。';
+  var q=paperData?paperData.q:'';
+  var usr='检索话题：'+q+'\n\n'+src;
+  callM(model,[{role:'user',content:usr}],sys).then(function(text){
+    body.innerHTML=prev;
+    // 提炼结果暂存，供注入/复制/保存
+    var refined={text:text, model:model, q:q, papers:ps};
+    window.__refined=refined;
+    body.innerHTML=prev+'<div class="pdiv" style="margin-top:10px;border:1px solid var(--ac);border-radius:10px;padding:10px 12px;background:rgba(108,92,231,.06)">'
+      +'<div style="font-weight:600;margin-bottom:6px;color:var(--ac)">📖 '+MI[model].name+' 提炼结果</div>'
+      +'<div style="white-space:pre-wrap;font-size:13px;line-height:1.7;max-height:220px;overflow-y:auto">'+esc(text)+'</div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">'
+      +'<button class="sbtn2" onclick="paperRefineInject()" style="font-size:11px;padding:5px 10px">🧠 注入讨论</button>'
+      +'<button class="sbtn2" onclick="paperRefineCopy()" style="font-size:11px;padding:5px 10px">📋 复制</button>'
+      +'<button class="sbtn2" onclick="paperRefineSave()" style="font-size:11px;padding:5px 10px">💾 保存文件</button>'
+      +'</div></div>';
+    toast('提炼完成','ok');
+  }).catch(function(err){
+    body.innerHTML=prev;
+    toast('提炼失败：'+err.message,'er');
+  });
+}
+function paperRefineInject(){
+  var r=window.__refined; if(!r){toast('暂无提炼结果','er');return;}
+  var txt='📚 【'+MI[r.model].name+' 精读提炼 · '+(r.q||'资料')+'】\n'+r.text;
+  dLog.push({role:'paper',model:r.model,action:'论文提炼',content:txt,round:dRnd});
+  addHostMsg('📚 已注入 '+MI[r.model].name+' 的精读提炼，AI 将基于此发言');
+  closeMax();
+  if(!dRun){ runRnd(); }
+}
+function paperRefineCopy(){
+  var r=window.__refined; if(!r){toast('暂无提炼结果','er');return;}
+  var txt='📚 【'+MI[r.model].name+' 精读提炼 · '+(r.q||'资料')+'】\n'+r.text;
+  var ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+  try{document.execCommand('copy'); toast('已复制','ok');}catch(e){toast('复制失败','er');}
+  document.body.removeChild(ta);
+}
+function paperRefineSave(){
+  var r=window.__refined; if(!r){toast('暂无提炼结果','er');return;}
+  var txt='# '+MI[r.model].name+' 精读提炼\n\n> 话题：'+(r.q||'资料')+'\n\n'+r.text;
+  var fn='精读提炼_'+(r.q||'资料').slice(0,20).replace(/[\\/:*?"<>|]/g,'')+'.md';
+  var blob=new Blob([txt],{type:'text/markdown;charset=utf-8'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fn; document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href); document.body.removeChild(a);},500);
+  toast('已保存 '+fn,'ok');
+}
 function discUserTxtSet(t){
   var el=document.getElementById('discUserTxt');
   if(el){ el.value=t; resize(el); }
@@ -1149,27 +1282,68 @@ function openContModal(){
     d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
     document.body.appendChild(d); o=d;
   }
-  document.getElementById('maxTitle').textContent='🔄 延续讨论';
+  document.getElementById('maxTitle').textContent='🔄 延续讨论 · 结果转化';
+  // 产出格式模板
+  var fmts=[
+    {id:'html',     n:'🖥 HTML 可视化页面', d:'把结论做成可交互网页（推荐 Opus）',  m:'opus'},
+    {id:'img',      n:'🎨 图片生成 Prompt', d:'写一组文生图提示词（推荐 GPT）',      m:'gpt'},
+    {id:'json',     n:'📦 JSON 结构化数据', d:'结论转成结构化 JSON（推荐 GPT）',      m:'gpt'},
+    {id:'md',       n:'📄 Markdown 文档',   d:'结论整理成 Markdown 报告（推荐 DeepSeek）', m:'deepseek'},
+    {id:'ppt',      n:'📊 演示大纲',        d:'生成演示 PPT 大纲（推荐 Gemini）',      m:'gemini'},
+    {id:'other',    n:'✏️ 自定义',          d:'自己描述要什么格式和方向',              m:'gpt'}
+  ];
+  var ml=MODELS.map(function(m){
+    return '<label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:var(--sf);margin-bottom:6px">'
+      +'<input type="radio" name="contModel" value="'+m+'" '+(m==='gpt'?'checked':'')+' style="accent-color:var(--ac)">'
+      +'<span style="color:'+MI[m].color+';font-weight:700">'+MI[m].name+'</span>'
+      +'<span style="font-size:11px;color:var(--txm)">'+MI[m].role+'</span>'
+      +'</label>';
+  }).join('');
   document.getElementById('maxBody').innerHTML='<div style="padding:4px 0;font-size:13px;line-height:1.8">'
     +'<div style="font-weight:600;margin-bottom:8px">基于上一轮结论，你想做什么？</div>'
-    +'<div style="color:var(--txm);font-size:12px;margin-bottom:12px">例如：形象化、写图片生成 Prompt、做 HTML 可视化、总结成教案、翻译成英文、制定实施路线图…</div>'
-    +'<textarea id="contDir" rows="3" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none" placeholder="输入延续方向…"></textarea>'
+    +'<div style="color:var(--txm);font-size:12px;margin-bottom:12px">选择产出格式与生成模型，AI 将按结论产出具体文件内容。</div>'
+    +'<div style="margin-bottom:12px">'
+    +fmts.map(function(f){
+      return '<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:var(--sf);margin-bottom:6px" onclick="document.getElementById(\'contDir\').value=document.getElementById(\'contDir\').placeholder">'
+        +'<input type="radio" name="contFmt" value="'+f.id+'" data-m="'+f.m+'" '+(f.id==='html'?'checked':'')+' style="accent-color:var(--ac)">'
+        +'<span style="flex:1">'+f.n+'<div style="font-size:11px;color:var(--txm)">'+f.d+'</div></span>'
+        +'</label>';
+    }).join('')
+    +'</div>'
+    +'<textarea id="contDir" rows="2" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none" placeholder="把讨论结论形象化，生成一套图片 Prompt"></textarea>'
+    +'<div style="font-weight:600;margin:12px 0 6px">🧠 产出模型（负责生成内容）</div>'
+    +ml
     +'<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">'
     +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
-    +'<button class="pab pri" onclick="contStart()" style="font-size:11px;padding:6px 14px">🚀 发起延续讨论</button>'
+    +'<button class="pab pri" onclick="contStart()" style="font-size:11px;padding:6px 14px">🚀 发起转化</button>'
     +'</div></div>';
+  // 格式选择联动：自动切换推荐模型
+  document.querySelectorAll('input[name="contFmt"]').forEach(function(r){
+    r.addEventListener('change',function(){
+      var m=this.dataset.m||'gpt';
+      document.querySelectorAll('input[name="contModel"]').forEach(function(x){x.checked=(x.value===m);});
+    });
+  });
   o.classList.add('open');
   setTimeout(function(){var ta=document.getElementById('contDir');if(ta)ta.focus();},100);
 }
 function contStart(){
   var dir=document.getElementById('contDir').value.trim();
   if(!dir){toast('请输入延续方向','er');return;}
+  // 读取选中的产出格式与模型
+  var fmt=document.querySelector('input[name="contFmt"]:checked');
+  var fmtId=fmt?fmt.value:'other';
+  var mdl=document.querySelector('input[name="contModel"]:checked');
+  var model=mdl?mdl.value:'gpt';
   closeMax();
   // 保存当前讨论的结论到延续上下文
   dPrevRpt=finalRpt;
   dContSeed=true;
-  // 直接用延续方向作为新话题，进入讨论
+  // 直接用延续方向作为新话题，进入讨论（延续链）
   document.getElementById('topicInp').value='【延续】'+dir;
+  // 标记本次延续的产出模型，供讨论中参考
+  localStorage.setItem('cvo2_cont_model', model);
+  localStorage.setItem('cvo2_cont_fmt', fmtId);
   startDisc();
 }
 loadCfg();
@@ -1937,7 +2111,12 @@ function runGuestTurn(isFollowUp) {
   var prompt;
   if(!isFollowUp){
     if(dContSeed && dPrevRpt){
-      prompt='讨论话题(延续讨论):"'+dTopic+'"\n\n上一轮讨论已得出结论：\n'+dPrevRpt.slice(0,3000)+'\n\n请基于以上结论，围绕延续方向继续深入讨论，给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
+      // 延续讨论：带上上轮结论 + 产出模型/格式要求
+      var contModel=localStorage.getItem('cvo2_cont_model')||'gpt';
+      var contFmt=localStorage.getItem('cvo2_cont_fmt')||'other';
+      var fmtName={html:'HTML 可视化页面',img:'图片生成 Prompt',json:'JSON 结构化数据',md:'Markdown 文档',ppt:'演示大纲',other:'自定义格式'}[contFmt]||'自定义格式';
+      var modelName=MI[contModel]?MI[contModel].name:contModel;
+      prompt='讨论话题(延续讨论):"'+dTopic+'"\n\n上一轮讨论已得出结论：\n'+dPrevRpt.slice(0,3000)+'\n\n本次是【结果转化】延续：\n- 产出格式：'+fmtName+'\n- 产出模型：'+modelName+'（负责最终生成文件内容）\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径\n最终应由 '+modelName+' 完成实际文件生成。';
     }else{
       prompt='讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
     }
