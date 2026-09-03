@@ -627,6 +627,9 @@ body.dmax #discSc .dms{flex:1;min-height:0}
             <div class="rmb" id="rmA" onclick="selRunMode('auto')">
               <span class="rmi">🤖</span><span class="rmn">自动收敛</span><span class="rmd">共识≥85% 自动停止</span>
             </div>
+            <div class="rmb" id="rmB" onclick="selBriefMode()" style="cursor:pointer">
+              <span class="rmi">⚡</span><span class="rmn">简要模式</span><span class="rmd">回复限 200 字，快速收敛</span>
+            </div>
           </div>
         </div>
         <div id="blkTrans" style="display:none">
@@ -945,6 +948,7 @@ function fixedGptCfg(){ return {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmW
 // ════ APP STATE ════
 var appMode = '1v1';
 var runMode = 'manual';
+var briefMode = false;    // 简要模式：各模型回复限字数，快速收敛话题
 var sel1v1  = 'gpt';
 var selMulti = {gpt:true};
 var vpOn = false;
@@ -1462,6 +1466,19 @@ function selRunMode(m) {
   runMode = m;
   document.getElementById('rmM').className = 'rmb' + (m==='manual'?' active':'');
   document.getElementById('rmA').className = 'rmb' + (m==='auto'?' active tl':'');
+}
+
+// ⚡ 简要模式：切换开关，开启后各模型回复限字数（默认 200 字）
+function selBriefMode(){
+  briefMode=!briefMode;
+  var b=document.getElementById('rmB');
+  if(b){
+    if(briefMode){ b.classList.add('active'); b.classList.add('tl'); }
+    else{ b.classList.remove('active'); b.classList.remove('tl'); }
+  }
+  var sm=document.getElementById('stMod');
+  if(sm) sm.textContent=briefMode?'简要':'手动';
+  toast(briefMode?'⚡ 简要模式已开启（回复≤200字，快速收敛）':'简要模式已关闭','ok');
 }
 
 function handleStart() {
@@ -2129,6 +2146,7 @@ function runGuestTurn(isFollowUp) {
     prompt='讨论话题:"'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n请回应评议观点：回应有效反对，说明采纳的修正，维护未被驳倒的立场。';
   }
   var sys='你是'+MI[dGuest].name+'，本次首席嘉宾，专长：'+MI[dGuest].role+'。';
+  if(briefMode){ sys+=' 当前为【简要模式】：回复务必控制在200字以内，只输出核心观点，用简短段落或列表，不要冗长展开。'; prompt+='\n【简要模式】回复≤200字，只讲核心要点。'; }
   return callM(dGuest,[{role:'user',content:prompt}],sys).then(function(r){
     rmEl(tid); addDiscGuestMsg(dGuest,r,isFollowUp);
     dLog.push({role:'guest',model:dGuest,action:isFollowUp?'回应':'首发',content:r,round:dRnd});
@@ -2150,6 +2168,7 @@ function runReviewerTurn(rev) {
     prompt='讨论话题:"'+dTopic+'"\n\n记录：\n'+ctx+'\n\n请对嘉宾'+MI[dGuest].name+'的观点评议。\n只能选4种之一：\n[补充] 对某论点补充\n[质疑] 对某论点质疑\n[反对] 明确反对某论点\n[修正] 指出并修正错误\n\n发言必须以操作类型开头，针对嘉宾具体论点。';
   }
   var sys='你是'+MI[rev].name+'，评议AI，专长：'+MI[rev].role+'。必须围绕嘉宾观点，不可独立发挥。';
+  if(briefMode){ sys+=' 当前为【简要模式】：回复务必控制在200字以内，只输出关键评议（补充/质疑/反对/修正），不展开背景。'; prompt+='\n【简要模式】回复≤200字，只讲核心评议。'; }
   return callM(rev,[{role:'user',content:prompt}],sys).then(function(r){
     rmEl(tid); var ac=parseAc(r); addDiscRevMsg(rev,r,ac);
     dLog.push({role:'reviewer',model:rev,action:ac,content:r,round:dRnd});
@@ -2207,7 +2226,7 @@ function togAuto() {
   var btn=document.getElementById('ctAuto');
   btn.classList.toggle('aon',dAuto);
   btn.querySelector('span:last-child').textContent=dAuto?'停止自动':'自动';
-  document.getElementById('stMod').textContent=dAuto?'自动':'手动';
+  document.getElementById('stMod').textContent=briefMode?'简要':(dAuto?'自动':'手动');
   toast(dAuto?'已开启自动收敛':'已切换手动控制','ok');
   if(dAuto&&dRun)contDisc();
 }
@@ -2431,7 +2450,7 @@ function updStats(){
   document.getElementById('stRnd').textContent='第 '+dRnd+' 轮';
   document.getElementById('stTrn').textContent=dTrn;
   document.getElementById('stCon').textContent=dCons?dCons+'%':'—';
-  document.getElementById('stMod').textContent=dAuto?'自动':'手动';
+  document.getElementById('stMod').textContent=briefMode?'简要':(dAuto?'自动':'手动');
   document.getElementById('stConF').style.width=dCons+'%';
 }
 function setCtrl(dis){['ctCont','ctRpt','ctAuto','ctEnd'].forEach(function(id){var e=document.getElementById(id);if(e)e.disabled=dis;});}
