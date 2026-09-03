@@ -2994,10 +2994,168 @@ function histOpen(i){
     }).join('');
   }
   html+='</div>';
-  html+='<div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd)">'
-    +'<button class="sbtn2" onclick="histAdvance()" style="font-size:14px;padding:10px 22px">🔗 进阶讨论 · 基于此话题继续延展</button>'
+  html+='<div style="display:flex;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd);justify-content:center;flex-wrap:wrap">'
+    +'<button class="sbtn2" onclick="histTransform()" style="font-size:13px;padding:10px 16px">⚡ 成果转化 · 直接生成文件</button>'
+    +'<button class="sbtn2" onclick="histAdvance()" style="font-size:13px;padding:10px 16px">🔗 进阶讨论 · 继续延展</button>'
     +'</div>';
   viewMax(html, '📚 讨论回看 · '+esc(it.topic), true);
+}
+
+// 从历史回看发起成果转化：直接以历史结论生成成品文件(不经过讨论)
+function histTransform(){
+  var h=getHist();
+  var it=(typeof window.__histIdx!=='undefined'&&h[window.__histIdx])?h[window.__histIdx]:null;
+  if(!it){toast('未找到该历史话题','er');return;}
+  window.__histRpt=it.report||it.topic||'';
+  window.__histTopic=it.topic||'历史话题';
+  window.__histLog=it.log||[];
+  transformModal(window.__histRpt, window.__histTopic, window.__histLog);
+}
+
+// ════ 成果转化工坊：历史报告/讨论结论 → 选格式+模型 → 直接生成成品文件 ════
+function transformModal(rpt, topic, log){
+  var o=document.getElementById('maxOverlay');
+  if(!o){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><div class="maxbtns"><button class="mdc" onclick="closeMax()">✕</button></div></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); o=d;
+  }
+  window.__tr={rpt:rpt||'', topic:topic||'', log:log||[]};
+  document.getElementById('maxTitle').textContent='⚡ 成果转化 · 生成文件';
+  // 格式选项
+  var fmts=[
+    {id:'prompt', n:'🎨 图片生成 Prompt', d:'把结论重写成文生图提示词', m:'gpt',      ext:'.md'},
+    {id:'html',   n:'🖥 HTML 可视化页面', d:'生成可交互 HTML 展示页',   m:'opus',     ext:'.html'},
+    {id:'json',   n:'📦 JSON 结构化数据', d:'结论转成结构化 JSON',       m:'gpt',      ext:'.json'},
+    {id:'md',     n:'📄 Markdown 文档',   d:'结论整理成 Markdown 报告',   m:'deepseek', ext:'.md'},
+    {id:'docx',   n:'📝 Word 文档',       d:'生成可下载的 .docx 文档',    m:'opus',     ext:'.docx'},
+    {id:'custom', n:'✏️ 自定义',          d:'指定格式与要求',             m:'gpt',      ext:''}
+  ];
+  // 模型选项（全部内置 key）
+  var ml=MODELS.map(function(m){
+    var ck=cfg[m]&&cfg[m].key?'':'（未配置）';
+    return '<label style="display:flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--sf);margin-bottom:5px;font-size:12px">'
+      +'<input type="radio" name="trModel" value="'+m+'" '+(m==='gpt'?'checked':'')+' style="accent-color:var(--ac);margin:0">'
+      +'<span style="color:'+MI[m].color+';font-weight:700">'+MI[m].name+'</span>'
+      +'<span style="font-size:10px;color:var(--txm)">'+MI[m].role+' '+ck+'</span>'
+      +'</label>';
+  }).join('');
+  document.getElementById('maxBody').innerHTML=
+    '<div style="font-size:13px;line-height:1.7">'
+    +'<div style="font-weight:600;margin-bottom:4px">📌 '+esc(topic)+'</div>'
+    +'<div style="font-size:11px;color:var(--txm);margin-bottom:12px">结论摘要：'+esc((rpt||'').replace(/\s+/g,' ').slice(0,90))+'…</div>'
+    +'<div class="mdst">① 选择输出格式</div>'
+    +fmts.map(function(f){
+      return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--sf);margin-bottom:5px;font-size:12px">'
+        +'<input type="radio" name="trFmt" value="'+f.id+'" data-m="'+f.m+'" data-ext="'+f.ext+'" '+(f.id==='prompt'?'checked':'')+' style="accent-color:var(--ac)">'
+        +'<span style="flex:1">'+f.n+'<div style="font-size:10px;color:var(--txm)">'+f.d+'</div></span>'
+        +'</label>';
+    }).join('')
+    +'<div class="mdst" style="margin-top:10px">② 选择生成模型</div>'
+    +ml
+    +'<div class="mdst" style="margin-top:10px">③ 补充要求（可选）</div>'
+    +'<textarea id="trExtra" rows="2" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:8px;color:var(--tx);padding:10px;font-family:inherit;font-size:12px;line-height:1.5;resize:vertical;outline:none" placeholder="例如：中英双语 / 深色主题 / 包含关键数据表格…"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+    +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'<button class="pab pri" onclick="transformRun()" style="font-size:11px;padding:6px 14px">⚡ 生成文件</button>'
+    +'</div></div>';
+  // 格式→推荐模型联动
+  document.querySelectorAll('input[name="trFmt"]').forEach(function(r){
+    r.addEventListener('change',function(){
+      var m=this.dataset.m||'gpt';
+      document.querySelectorAll('input[name="trModel"]').forEach(function(x){x.checked=(x.value===m);});
+    });
+  });
+  o.style.display='flex'; o.classList.add('open');
+}
+
+// 执行生成：调所选模型，产出成品内容后展示预览 + 下载
+function transformRun(){
+  var t=window.__tr; if(!t){toast('无转化内容','er');return;}
+  var fmt=document.querySelector('input[name="trFmt"]:checked');
+  var mdl=document.querySelector('input[name="trModel"]:checked');
+  var f=fmt?fmt.value:'prompt';
+  var fm=fmt?fmt.dataset.m:'gpt';
+  var fext=fmt?fmt.dataset.ext:'.md';
+  var model=mdl?mdl.value:fm;
+  if(!cfg[model]||!cfg[model].key){toast((MI[model]?MI[model].name:model)+' 未配置 API Key','er');return;}
+  var extra=document.getElementById('trExtra').value.trim();
+  var body=document.getElementById('maxBody');
+  body.innerHTML='<div style="color:var(--txm);padding:30px 0;text-align:center;font-size:13px">⏳ '+MI[model].name+' 正在生成'+({prompt:'图片 Prompt',html:'HTML 页面',json:'JSON',md:'Markdown',docx:'Word 文档',custom:'自定义文件'}[f]||'文件')+'…<br><span style="font-size:11px;opacity:.7">基于「'+esc(t.topic)+'」结论</span></div>';
+  // 组装源材料：报告 + 讨论记录(截取)
+  var src='【讨论话题】'+t.topic+'\n\n【最终报告】\n'+t.rpt+'\n';
+  if(t.log&&t.log.length){
+    src+='\n【讨论过程摘要】\n'+t.log.slice(0,12).map(function(e){
+      var n=MI[e.model]?MI[e.model].name:e.model;
+      return '· '+n+'('+(e.role==='guest'?'嘉宾':'评议')+')：'+String(e.content||'').slice(0,150);
+    }).join('\n')+'\n';
+  }
+  if(extra)src+='\n【补充要求】'+extra+'\n';
+  var spec={prompt:'生成 Midjourney/文生图可用的图片 Prompt（中文+英文关键词），围绕设备/场景形象化，含主体、环境、风格、镜头、光线、构图等，分组列出',
+    html:'生成完整单文件 HTML(含内嵌CSS/JS)，把结论做成深色主题可交互可视化页面，中文界面，含图表/卡片/结构示意，标题用讨论话题',
+    json:'生成结构化 JSON(无注释、可直接解析)，含 topic/summary/key_points/conclusions/data 等字段',
+    md:'生成规范 Markdown 报告(标题层级/列表/表格)，完整呈现讨论结论',
+    docx:'生成 .docx 兼容的 HTML 结构内容(Word 可粘贴识别：用 p/h1/h2/table 标签，不用 div 布局)，完整呈现讨论报告',
+    custom:'按用户补充要求生成内容'}[f]||'按要求生成内容';
+  var sys='你是文件生成专家'+MI[model].name+'。根据提供的讨论材料，'+spec+'。要求：只输出成品内容本身，不要解释过程，不要用代码块包裹(除非格式本身需要)。';
+  callM(model,[{role:'user',content:src}],sys).then(function(text){
+    window.__trOut={text:text, fmt:f, ext:fext, model:model, topic:t.topic};
+    var isHtml=f==='html';
+    // 展示预览 + 操作按钮
+    body.innerHTML='<div style="font-size:13px;line-height:1.7">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">'
+      +'<span style="font-weight:700">✅ '+MI[model].name+' 已生成'+({prompt:'图片 Prompt',html:'HTML 页面',json:'JSON',md:'Markdown',docx:'Word 文档',custom:'文件'}[f]||'')+'</span>'
+      +'<span style="flex:1"></span>'
+      +'<button class="sbtn2" onclick="transformDl()" style="font-size:11px;padding:5px 10px">💾 下载文件</button>'
+      +'<button class="sbtn2" onclick="transformCopy()" style="font-size:11px;padding:5px 10px">📋 复制</button>'
+      +(f==='html'?'<button class="sbtn2" onclick="transformPreview()" style="font-size:11px;padding:5px 10px">👁 预览</button>':'')
+      +'<button class="sbtn2" onclick="transformDisc()" style="font-size:11px;padding:5px 10px">🧠 注入讨论</button>'
+      +'<button class="sbtn2" onclick="closeMax()" style="font-size:11px;padding:5px 10px;color:var(--txm)">✕ 完成</button>'
+      +'</div>'
+      +'<div style="max-height:50vh;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;background:var(--sf);padding:14px;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.7;font-family:monospace">'+esc(text)+'</div>'
+      +'</div>';
+    toast('生成完成','ok');
+  }).catch(function(err){
+    body.innerHTML='<div style="color:var(--ter);padding:20px;text-align:center">生成失败：'+esc(err.message)+'</div>';
+  });
+}
+function transformDl(){
+  var o=window.__trOut; if(!o){toast('无生成内容','er');return;}
+  var safe=o.topic.replace(/[\\/:*?"<>|]/g,'_').slice(0,24);
+  var fext=o.ext||'.txt';
+  // docx: 输出 .doc 兼容 HTML → 存成 .docx 需特殊处理，这里生成 HTML 内容并命名为 .doc（Word 可打开）
+  var fname='成果转化_'+safe+fext;
+  var blob;
+  if(o.fmt==='docx'){
+    // 用 Word 兼容 HTML 包裹（mso 前缀确保 Word 识别）
+    var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>'+o.topic+'</title></head><body>'+o.text+'</body></html>';
+    blob=new Blob(['\ufeff'+html],{type:'application/msword'});
+    fname='成果转化_'+safe+'.doc';
+  }else{
+    blob=new Blob([o.text],{type:'text/plain;charset=utf-8'});
+  }
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fname;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},300);
+  toast('✓ 已下载 '+fname,'ok');
+}
+function transformCopy(){
+  var o=window.__trOut; if(!o){toast('无生成内容','er');return;}
+  var ta=document.createElement('textarea'); ta.value=o.text; document.body.appendChild(ta); ta.select();
+  try{document.execCommand('copy'); toast('已复制','ok');}catch(e){toast('复制失败','er');}
+  document.body.removeChild(ta);
+}
+function transformPreview(){
+  var o=window.__trOut; if(!o||o.fmt!=='html'){toast('仅 HTML 可预览','er');return;}
+  viewMax(o.text, '👁 预览 · '+o.topic, true);
+}
+function transformDisc(){
+  var o=window.__trOut; if(!o){toast('无生成内容','er');return;}
+  var txt='⚡ 【成果转化 · '+({prompt:'图片 Prompt',html:'HTML',json:'JSON',md:'Markdown',docx:'Word',custom:'文件'}[o.fmt]||o.fmt)+' · '+MI[o.model].name+' 生成】\n'+o.text.slice(0,1800);
+  if(dLog){dLog.push({role:'paper',model:o.model,action:'成果转化',content:txt,round:dRnd});}
+  addHostMsg('⚡ 已注入 '+MI[o.model].name+' 生成的成果，AI 可基于此继续讨论');
+  closeMax();
+  if(!dRun&&typeof runRnd==='function'){runRnd();}
 }
 
 // 从历史回看发起进阶讨论：以上一轮历史结论为基础继续延展
