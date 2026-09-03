@@ -379,6 +379,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 .mo.open{display:flex}
 /* fullscreen content overlay (tap a message/report → fullscreen view) */
 #maxOverlay{position:fixed;inset:0;z-index:300;display:none;flex-direction:column;background:var(--bg-g)}
+#maxOverlay.open{display:flex}
 #maxOverlay .maxbox{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--bg-g)}
 #maxOverlay .maxhdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(20,20,38,.97);border-bottom:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap;gap:6px 8px}
 #maxOverlay .maxt{font-family:'Syne',sans-serif;font-weight:700;font-size:15px;letter-spacing:.06em;flex:1 1 auto;min-width:0;word-break:break-word;line-height:1.35}
@@ -995,7 +996,7 @@ function paperModal(){
   }
   document.getElementById('maxTitle').textContent='📚 论文速查 · 科学依据';
   document.getElementById('maxBody').innerHTML=buildPaperHtml(t);
-  o.classList.add('open');
+  o.style.display='flex'; o.classList.add('open');
   setTimeout(function(){var q=document.getElementById('paperQ');if(q)q.focus();},100);
 }
 
@@ -1330,7 +1331,7 @@ function openContModal(){
       document.querySelectorAll('input[name="contModel"]').forEach(function(x){x.checked=(x.value===m);});
     });
   });
-  o.classList.add('open');
+  o.style.display='flex'; o.classList.add('open');
   setTimeout(function(){var ta=document.getElementById('contDir');if(ta)ta.focus();},100);
 }
 function contStart(){
@@ -2923,7 +2924,7 @@ function speakMax(){
 }
 function closeMax(){
   var o=document.getElementById('maxOverlay');
-  if(o)o.style.display='none';
+  if(o){o.style.display='none'; o.classList.remove('open');}
 }
 
 // ════ DISCUSSION HISTORY (localStorage memory) ════
