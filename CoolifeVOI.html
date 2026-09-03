@@ -1326,8 +1326,9 @@ function openContModal(){
     +'<textarea id="contDir" rows="2" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none" placeholder="把讨论结论形象化，生成一套图片 Prompt"></textarea>'
     +'<div style="font-weight:600;margin:12px 0 6px">🧠 产出模型（负责生成内容）</div>'
     +ml
-    +'<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">'
+    +'<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap">'
     +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'<button class="pab" onclick="contStartDirect()" style="font-size:11px;padding:6px 14px;background:var(--tl);color:#fff">🔄 直接再次发起（不转化）</button>'
     +'<button class="pab pri" onclick="contStart()" style="font-size:11px;padding:6px 14px">🚀 发起转化</button>'
     +'</div></div>';
   // 格式选择联动：自动切换推荐模型
@@ -1340,8 +1341,9 @@ function openContModal(){
   o.style.display='flex'; o.classList.add('open');
   setTimeout(function(){var ta=document.getElementById('contDir');if(ta)ta.focus();},100);
 }
+// 发起转化：以延续方向+产出格式+模型，生成成品
 function contStart(){
-  var dir=document.getElementById('contDir').value.trim();
+  var dir=document.getElementById('contDir').value.trim()||'继续深入讨论：基于上一轮结论，探讨下一步';
   if(!dir){toast('请输入延续方向','er');return;}
   // 读取选中的产出格式与模型
   var fmt=document.querySelector('input[name="contFmt"]:checked');
@@ -1358,6 +1360,16 @@ function contStart(){
   // 标记本次延续的产出模型，供讨论中参考
   localStorage.setItem('cvo2_cont_model', model);
   localStorage.setItem('cvo2_cont_fmt', fmtId);
+  startDisc();
+}
+// 直接再次发起：不转化，不选格式/模型，仅以上一轮结论为上下文继续讨论
+function contStartDirect(){
+  var dir=document.getElementById('contDir').value.trim()||'继续深入讨论：基于上一轮结论，探讨下一步';
+  if(!dir){toast('请输入延续方向','er');return;}
+  closeMax();
+  if(!dHistContRpt){ dPrevRpt=finalRpt; }
+  dContSeed=true;
+  document.getElementById('topicInp').value='【延续】'+dir;
   startDisc();
 }
 loadCfg();
@@ -3021,12 +3033,27 @@ function histOpen(i){
   }
   html+='</div>';
   html+='<div style="display:flex;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--bd);justify-content:center;flex-wrap:wrap">'
+    +'<button class="sbtn2" onclick="histRelaunch()" style="font-size:13px;padding:10px 16px">🔄 论点再次发起 · 继续讨论</button>'
     +'<button class="sbtn2" onclick="histTransform()" style="font-size:13px;padding:10px 16px">⚡ 成果转化 · 直接生成文件</button>'
     +'<button class="sbtn2" onclick="histAdvance()" style="font-size:13px;padding:10px 16px">🔗 进阶讨论 · 继续延展</button>'
     +'</div>';
   viewMax(html, '📚 讨论回看 · '+esc(it.topic), true);
 }
 
+// 论点再次发起：不转化，直接以历史结论为上下文继续讨论下一步
+function histRelaunch(){
+  var h=getHist();
+  var it=(typeof window.__histIdx!=='undefined'&&h[window.__histIdx])?h[window.__histIdx]:null;
+  if(!it){toast('未找到该历史话题','er');return;}
+  dPrevRpt=it.report||'';
+  dContSeed=true;
+  dHistContRpt=dPrevRpt;
+  // 直接进入讨论页，话题带延续标记，预设方向为继续深入
+  var dir='继续讨论：基于「'+it.topic+'」的结论，下一步深入探讨';
+  document.getElementById('topicInp').value='【延续】'+dir;
+  startDisc();
+  toast('🔄 已从历史论点再次发起讨论','ok');
+}
 // 从历史回看发起成果转化：直接以历史结论生成成品文件(不经过讨论)
 function histTransform(){
   var h=getHist();
