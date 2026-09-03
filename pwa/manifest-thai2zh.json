@@ -1,0 +1,16 @@
+{
+  "name": "CoolifeVO 泰语→中文翻译",
+  "short_name": "泰→中",
+  "description": "泰语翻译为中文 · 语音输入",
+  "start_url": "./CoolifeVOI-Thai2Zh.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1a2e",
+  "theme_color": "#6c5ce7",
+  "icons": [
+    { "src": "pwa/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
