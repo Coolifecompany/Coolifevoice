@@ -1039,12 +1039,12 @@ function paperSearch(){
   document.querySelectorAll('.paperSrc').forEach(function(cb){ if(cb.checked) srcs.push(cb.value); });
   if(!srcs.length){toast('请至少选择一个平台','er');return;}
   body.innerHTML='<div style="color:var(--txm);padding:20px 0;text-align:center">⏳ 正在检索：'+srcs.map(function(s){return {openalex:'OpenAlex',arxiv:'arXiv',stack:'Stack+Mechanics',nhtsa:'NHTSA'}[s];}).join(' + ')+' …</div>';
-  // 按勾选源并行检索
+  // 按勾选源并行检索（单源失败不影响其他源）
   var jobs=[];
-  if(srcs.indexOf('openalex')>=0)jobs.push(paperSearchOpenAlex(q));
-  if(srcs.indexOf('arxiv')>=0)jobs.push(paperSearchArxiv(q));
-  if(srcs.indexOf('stack')>=0)jobs.push(paperSearchStack(q));
-  if(srcs.indexOf('nhtsa')>=0)jobs.push(paperSearchNhtsa(q));
+  if(srcs.indexOf('openalex')>=0)jobs.push(paperSearchOpenAlex(q).catch(function(e){console.error('OpenAlex:',e);return [];}));
+  if(srcs.indexOf('arxiv')>=0)jobs.push(paperSearchArxiv(q).catch(function(e){console.error('arXiv:',e);return [];}));
+  if(srcs.indexOf('stack')>=0)jobs.push(paperSearchStack(q).catch(function(e){console.error('Stack:',e);return [];}));
+  if(srcs.indexOf('nhtsa')>=0)jobs.push(paperSearchNhtsa(q).catch(function(e){console.error('NHTSA:',e);return [];}));
   Promise.all(jobs).then(function(res){
     var papers=[].concat.apply([], res);
     paperCache[q]=papers;
@@ -1061,10 +1061,10 @@ function paperSearch(){
   });
 }
 
-// Stack Exchange (Mechanics): 汽车维修/诊断问答
+// Stack Exchange (Mechanics): 汽车维修/诊断问答（带 8s 超时）
 function paperSearchStack(q){
   var url='https://api.stackexchange.com/2.3/search/advanced?site=mechanics&order=desc&sort=relevance&q='+encodeURIComponent(q)+'&pagesize=5&filter=default';
-  return fetch(url)
+  return fetchWithTimeout(url, 8000)
     .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('Stack HTTP '+r.status)); })
     .then(function(d){
       return (d.items||[]).map(function(it){
@@ -1082,11 +1082,10 @@ function paperSearchStack(q){
     });
 }
 
-// NHTSA: 美国国家公路交通安全管理局（召回/安全评级）
+// NHTSA: 美国国家公路交通安全管理局（召回/安全评级，带 8s 超时）
 function paperSearchNhtsa(q){
-  // 用关键词查召回信息
   var url='https://api.nhtsa.gov/recalls?query='+encodeURIComponent(q)+'&format=json';
-  return fetch(url)
+  return fetchWithTimeout(url, 8000)
     .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('NHTSA HTTP '+r.status)); })
     .then(function(d){
       var rows=(d.results||[]).slice(0,5).map(function(r){
@@ -1106,6 +1105,13 @@ function paperSearchNhtsa(q){
     });
 }
 function stripHtml(s){ var d=document.createElement('div'); d.innerHTML=String(s||''); return d.textContent||''; }
+
+// 带超时的 fetch 封装
+function fetchWithTimeout(url, ms){
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();}, ms||10000);
+  return fetch(url, {signal:ctrl.signal}).then(function(r){clearTimeout(timer);return r;}).catch(function(e){clearTimeout(timer);throw e;});
+}
 
 // OpenAlex：开放学术库，免费无限制
 function paperSearchOpenAlex(q){
@@ -1130,7 +1136,7 @@ function paperSearchOpenAlex(q){
 // arXiv：预印本，物理学/数学/CS 等
 function paperSearchArxiv(q){
   var url='https://export.arxiv.org/api/query?search_query=all:'+encodeURIComponent(q)+'&start=0&max_results=5&sortBy=relevance';
-  return fetch(url)
+  return fetchWithTimeout(url, 10000)
     .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('arXiv HTTP '+r.status)); })
     .then(function(xml){
       var papers=[];
