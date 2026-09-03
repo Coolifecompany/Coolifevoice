@@ -758,7 +758,8 @@ body.dmax #discSc .dms{flex:1;min-height:0}
         </div>
         <div id="sumBody"></div>
         <div class="suma">
-                  <button class="sumab pri" onclick="backSetup()">开启新对话</button>
+                  <button class="sumab pri" onclick="openContModal()">🔄 延续讨论</button>
+                  <button class="sumab" onclick="backSetup()">开启新对话</button>
                   <button class="sumab" onclick="copyRpt()">复制报告</button>
                   <button class="sumab" onclick="viewMax(finalRpt,'最终讨论报告')">📖 全屏阅读</button>
                   <button class="sumab" onclick="dlRpt()">💾 保存文件</button>
@@ -957,6 +958,8 @@ var dTopic='', dGuest='', dRevs=[];
 var dRnd=0, dTrn=0, dLog=[], dCons=0, dHigh=0;
 var dRun=false, dAuto=false, dStop=false;
 var finalRpt='';
+var dPrevRpt='';    // 上一轮总结报告（延续讨论用）
+var dContSeed=false; // 当前讨论是否为延续讨论（首轮提示基于上轮结论）
 var thinkIdx=0;
 var HIST_KEY='cvo2_disc_history';
 var dHistId='';   // 当前讨论对应的历史条目 id（同一讨论保存时去重更新）
@@ -1136,6 +1139,38 @@ function discUserTxtSet(t){
   if(el){ el.value=t; resize(el); }
   var ui=document.getElementById('discUserInput');
   if(ui) ui.style.display='flex';
+}
+
+// ════ 延续讨论（基于上一轮结论做进阶讨论） ════
+function openContModal(){
+  var o=document.getElementById('maxOverlay');
+  if(!o){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">内容</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); o=d;
+  }
+  document.getElementById('maxTitle').textContent='🔄 延续讨论';
+  document.getElementById('maxBody').innerHTML='<div style="padding:4px 0;font-size:13px;line-height:1.8">'
+    +'<div style="font-weight:600;margin-bottom:8px">基于上一轮结论，你想做什么？</div>'
+    +'<div style="color:var(--txm);font-size:12px;margin-bottom:12px">例如：形象化、写图片生成 Prompt、做 HTML 可视化、总结成教案、翻译成英文、制定实施路线图…</div>'
+    +'<textarea id="contDir" rows="3" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none" placeholder="输入延续方向…"></textarea>'
+    +'<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">'
+    +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'<button class="pab pri" onclick="contStart()" style="font-size:11px;padding:6px 14px">🚀 发起延续讨论</button>'
+    +'</div></div>';
+  o.classList.add('open');
+  setTimeout(function(){var ta=document.getElementById('contDir');if(ta)ta.focus();},100);
+}
+function contStart(){
+  var dir=document.getElementById('contDir').value.trim();
+  if(!dir){toast('请输入延续方向','er');return;}
+  closeMax();
+  // 保存当前讨论的结论到延续上下文
+  dPrevRpt=finalRpt;
+  dContSeed=true;
+  // 直接用延续方向作为新话题，进入讨论
+  document.getElementById('topicInp').value='【延续】'+dir;
+  startDisc();
 }
 loadCfg();
 buildSetupGrids();
@@ -1807,6 +1842,9 @@ function vcAddLine(role, text) {
 function startDisc() {
   var topic=document.getElementById('topicInp').value.trim();
   if(!topic){toast('请输入讨论话题','er');return;}
+  // 延续讨论判定：仅当话题以【延续】开头才保持延续上下文；普通新讨论自动重置
+  var isCont=(topic.indexOf('【延续】')===0)&&dPrevRpt;
+  if(!isCont){ dContSeed=false; dPrevRpt=''; }
   var ms=Object.keys(selMulti).filter(function(k){return selMulti[k];});
   if(ms.length<2){toast('至少2个模型','er');return;}
   if(!cfg.gpt.key){toast('GPT 主持人需配置 API Key','er');return;}
@@ -1826,7 +1864,9 @@ function startDisc() {
     // 所有其他已配置模型都参与评议；gpt 永远是最高权限（若 gpt 是嘉宾，则其余全部评议）
     dRevs=all.filter(function(m){return m!==g;});
     updGuestBar(); rmLastHost();
-    addHostMsg('📢 话题：「'+topic+'」\n🎤 主导：'+MI[dGuest].name+(g==='gpt'?'（最高权限·GPT-5.6）':'')+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无'));
+    var hmsg='📢 话题：「'+topic+'」\n🎤 主导：'+MI[dGuest].name+(g==='gpt'?'（最高权限·GPT-5.6）':'')+'\n👥 评议：'+(dRevs.map(function(m){return MI[m].name;}).join('、')||'无');
+    if(dContSeed && dPrevRpt){ hmsg+='\n🔗 延续自上一轮讨论结论'; }
+    addHostMsg(hmsg);
     return sleep(300);
   }).then(function(){return runRnd();})
   .catch(function(err){
@@ -1896,7 +1936,11 @@ function runGuestTurn(isFollowUp) {
   for(var i=dLog.length-1;i>=0;i--){if(dLog[i].role==='user'){userLast=dLog[i].content;break;}}
   var prompt;
   if(!isFollowUp){
-    prompt='讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
+    if(dContSeed && dPrevRpt){
+      prompt='讨论话题(延续讨论):"'+dTopic+'"\n\n上一轮讨论已得出结论：\n'+dPrevRpt.slice(0,3000)+'\n\n请基于以上结论，围绕延续方向继续深入讨论，给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
+    }else{
+      prompt='讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
+    }
   }else if(userLast){
     prompt='讨论话题:"'+dTopic+'"\n\n讨论记录：\n'+ctx+'\n\n用户刚刚插入了观点："'+userLast+'"\n请作为首席嘉宾首先明确回应这位用户的观点（赞同/部分赞同/反对，说明理由），然后继续推进讨论。';
   }else{
