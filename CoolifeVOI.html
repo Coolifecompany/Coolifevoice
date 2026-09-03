@@ -643,6 +643,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
                     </div>
         </div>
         <button class="stbtn" onclick="handleStart()">开始 →</button>
+        <button class="stbtn2" onclick="paperModal()" style="margin-top:10px">📚 资料速查（论文/汽车知识库）</button>
         <button class="stbtn2" onclick="openHist()" style="margin-top:10px">📚 历史话题</button>
         <div class="stnote">需配置 API Key · 1对1 至少 1 个模型 · 多AI至少 2 个 · 中泰互译选 1 个</div>
       </div>
@@ -742,7 +743,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
               <button class="cbt2" id="ctSay" onclick="discUserToggle()" title="输入你的观点，插入到讨论中让所有 AI 回应"><span class="ci">💬</span><span>发言</span></button>
               <button class="cbt2" id="ctImg" onclick="discInsertImg()" title="插入图片，GPT识别后结合当前话题继续讨论"><span class="ci">🖼</span><span>插图</span></button>
               <button class="cbt2" id="ctFile" onclick="discInsertFolder()" title="扫描文件夹，勾选文件后GPT读取并结合当前话题继续讨论"><span class="ci">📄</span><span>读文件</span></button>
-              <button class="cbt2" id="ctPaper" onclick="paperModal()" title="按话题速查公开学术论文(OpenAlex/arXiv)，引用科学依据支撑讨论"><span class="ci">📚</span><span>论文</span></button>
+              <button class="cbt2" id="ctPaper" onclick="paperModal()" title="按话题速查资料：OpenAlex/arXiv学术论文 + Stack汽车维修问答 + NHTSA召回数据，可勾选平台"><span class="ci">📚</span><span>论文</span></button>
               <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
               <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
               <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
