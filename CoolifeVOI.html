@@ -1315,7 +1315,7 @@ function openContModal(){
   ];
   var ml=MODELS.map(function(m){
     return '<label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--bd);border-radius:10px;cursor:pointer;background:var(--sf);margin-bottom:6px">'
-      +'<input type="radio" name="contModel" value="'+m+'" '+(m==='gpt'?'checked':'')+' style="accent-color:var(--ac)">'
+      +'<input type="checkbox" name="contModel" value="'+m+'" '+(m==='gpt'?'checked':'')+' style="accent-color:var(--ac)">'
       +'<span style="color:'+MI[m].color+';font-weight:700">'+MI[m].name+'</span>'
       +'<span style="font-size:11px;color:var(--txm)">'+MI[m].role+'</span>'
       +'</label>';
@@ -1332,7 +1332,7 @@ function openContModal(){
     }).join('')
     +'</div>'
     +'<textarea id="contDir" rows="2" style="width:100%;box-sizing:border-box;background:var(--sf);border:1px solid var(--bd);border-radius:10px;color:var(--tx);padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;outline:none" placeholder="把讨论结论形象化，生成一套图片 Prompt"></textarea>'
-    +'<div style="font-weight:600;margin:12px 0 6px">🧠 产出模型（负责生成内容）</div>'
+    +'<div style="font-weight:600;margin:12px 0 6px">🧠 产出模型（可多选协作）</div>'
     +ml
     +'<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;flex-wrap:wrap">'
     +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
@@ -1343,7 +1343,9 @@ function openContModal(){
   document.querySelectorAll('input[name="contFmt"]').forEach(function(r){
     r.addEventListener('change',function(){
       var m=this.dataset.m||'gpt';
-      document.querySelectorAll('input[name="contModel"]').forEach(function(x){x.checked=(x.value===m);});
+      // 多选模式：格式切换仅追加勾选推荐模型（不取消已勾选的其他模型）
+      var cb=document.querySelector('input[name="contModel"][value="'+m+'"]');
+      if(cb)cb.checked=true;
     });
   });
   o.style.display='flex'; o.classList.add('open');
@@ -1353,11 +1355,12 @@ function openContModal(){
 function contStart(){
   var dir=document.getElementById('contDir').value.trim()||'继续深入讨论：基于上一轮结论，探讨下一步';
   if(!dir){toast('请输入延续方向','er');return;}
-  // 读取选中的产出格式与模型
+  // 读取选中的产出格式与模型（多选：可勾选多个模型协作）
   var fmt=document.querySelector('input[name="contFmt"]:checked');
   var fmtId=fmt?fmt.value:'other';
-  var mdl=document.querySelector('input[name="contModel"]:checked');
-  var model=mdl?mdl.value:'gpt';
+  var models=[].slice.call(document.querySelectorAll('input[name="contModel"]:checked')).map(function(x){return x.value;});
+  if(!models.length){toast('请至少勾选一个产出模型','er');return;}
+  var model=models.join(',');
   closeMax();
   // 保存当前讨论的结论到延续上下文
   // 从历史回看发起时，dPrevRpt 已由 histAdvance 设为历史报告，不可被空 finalRpt 覆盖
@@ -2162,8 +2165,13 @@ function runGuestTurn(isFollowUp) {
       var contModel=localStorage.getItem('cvo2_cont_model')||'gpt';
       var contFmt=localStorage.getItem('cvo2_cont_fmt')||'other';
       var fmtName={html:'HTML 可视化页面',img:'图片生成 Prompt',json:'JSON 结构化数据',md:'Markdown 文档',ppt:'演示大纲',other:'自定义格式'}[contFmt]||'自定义格式';
-      var modelName=MI[contModel]?MI[contModel].name:contModel;
-      prompt='讨论话题(延续讨论):"'+dTopic+'"\n\n上一轮讨论已得出结论：\n'+dPrevRpt.slice(0,3000)+'\n\n本次是【结果转化】延续：\n- 产出格式：'+fmtName+'\n- 产出模型：'+modelName+'（负责最终生成文件内容）\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径\n最终应由 '+modelName+' 完成实际文件生成。';
+      var modelArr=contModel.split(',');
+      var modelNames=modelArr.map(function(m){return MI[m]?MI[m].name:m;});
+      var modelName=modelNames.join(' + ');
+      var multiNote=(modelNames.length>1)
+        ? '\n- 多模型协作：各产出模型请基于讨论结论各自产出对应内容，最终由用户比对采纳'
+        : '';
+      prompt='讨论话题(延续讨论):"'+dTopic+'"\n\n上一轮讨论已得出结论：\n'+dPrevRpt.slice(0,3000)+'\n\n本次是【结果转化】延续：\n- 产出格式：'+fmtName+'\n- 产出模型：'+modelName+'（负责最终生成文件内容）'+multiNote+'\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径\n最终应由 '+modelName+' 完成实际文件生成。';
     }else{
       prompt='讨论话题:"'+dTopic+'"\n\n请作为首席嘉宾给出首发观点：\n1.问题定义\n2.核心框架\n3.初步立场\n4.建议讨论路径';
     }
