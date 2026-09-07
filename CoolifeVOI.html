@@ -1360,6 +1360,10 @@ function contStart(){
   var fmtId=fmt?fmt.value:'other';
   var models=[].slice.call(document.querySelectorAll('input[name="contModel"]:checked')).map(function(x){return x.value;});
   if(!models.length){toast('请至少勾选一个产出模型','er');return;}
+  // ★ 把弹窗勾选的模型同步到 selMulti（否则 startDisc 仍报"至少2个模型"）
+  MODELS.forEach(function(k){ if(models.indexOf(k)>=0){selMulti[k]=true;} });
+  ensureMultiMin2();
+  buildSidebar();
   var model=models.join(',');
   closeMax();
   // 保存当前讨论的结论到延续上下文
@@ -1377,6 +1381,11 @@ function contStart(){
 function contStartDirect(){
   var dir=document.getElementById('contDir').value.trim()||'继续深入讨论：基于上一轮结论，探讨下一步';
   if(!dir){toast('请输入延续方向','er');return;}
+  // ★ 弹窗勾选的模型同步到 selMulti（直接发起也用弹窗勾选）
+  var models=[].slice.call(document.querySelectorAll('input[name="contModel"]:checked')).map(function(x){return x.value;});
+  MODELS.forEach(function(k){ if(models.indexOf(k)>=0){selMulti[k]=true;} });
+  ensureMultiMin2();
+  buildSidebar();
   closeMax();
   if(!dHistContRpt){ dPrevRpt=finalRpt; }
   dContSeed=true;
@@ -3056,6 +3065,19 @@ function histOpen(i){
   viewMax(html, '📚 讨论回看 · '+esc(it.topic), true);
 }
 
+// 确保多AI讨论至少有2个已选模型（自动补齐，防止延续/再次发起卡死在"至少2个模型"）
+function ensureMultiMin2(){
+  var cnt=Object.keys(selMulti).filter(function(k){return selMulti[k];}).length;
+  if(cnt>=2)return true;
+  // 优先补齐有 key 的模型，再补任意模型
+  MODELS.forEach(function(k){
+    if(!selMulti[k]&&cfg[k]&&cfg[k].key&&cnt<2){selMulti[k]=true;cnt++;}
+  });
+  MODELS.forEach(function(k){
+    if(!selMulti[k]&&cnt<2){selMulti[k]=true;cnt++;}
+  });
+  return cnt>=2;
+}
 // 论点再次发起：不转化，直接以历史结论为上下文继续讨论下一步
 function histRelaunch(){
   var h=getHist();
@@ -3067,6 +3089,8 @@ function histRelaunch(){
   // 直接进入讨论页，话题带延续标记，预设方向为继续深入
   var dir='继续讨论：基于「'+it.topic+'」的结论，下一步深入探讨';
   document.getElementById('topicInp').value='【延续】'+dir;
+  ensureMultiMin2();
+  buildSidebar();
   startDisc();
   toast('🔄 已从历史论点再次发起讨论','ok');
 }
