@@ -3133,13 +3133,45 @@ function histRelaunch(){
   toast('🔄 已从历史论点再次发起讨论','ok');
 }
 // 从历史回看发起成果转化：直接以历史结论生成成品文件(不经过讨论)
+// 找出与当前历史同一话题链的所有记录（含延续讨论）
+// 规则：主题名相同，或主题名包含彼此（如「XX」与「【延续】XX」）
+function histChain(it){
+  var h=getHist();
+  if(!it)return[it];
+  var core=(it.topic||'').replace(/^【延续】/,'').trim();
+  var chain=[];
+  h.forEach(function(x){
+    var xc=(x.topic||'').replace(/^【延续】/,'').trim();
+    if(!core||!xc)return;
+    // 主题相同，或一个包含另一个（延续链）
+    if(xc===core||xc.indexOf(core)>=0||core.indexOf(xc)>=0){
+      chain.push(x);
+    }
+  });
+  if(!chain.length)chain=[it];
+  return chain;
+}
 function histTransform(){
   var h=getHist();
   var it=(typeof window.__histIdx!=='undefined'&&h[window.__histIdx])?h[window.__histIdx]:null;
   if(!it){toast('未找到该历史话题','er');return;}
-  window.__histRpt=it.report||it.topic||'';
+  // ★ 合并同一话题链的所有进阶讨论记录（完整内容 → 结构化转化）
+  var chain=histChain(it);
+  window.__histRpt=chain.map(function(c,i){
+    return '【第'+(i+1)+'阶段 · '+c.time+'】\n'+(c.report||'');
+  }).join('\n\n');
   window.__histTopic=it.topic||'历史话题';
-  window.__histLog=it.log||[];
+  // 合并所有阶段的完整讨论记录
+  var allLog=[];
+  chain.forEach(function(c){
+    if(c.log&&c.log.length){
+      allLog=allLog.concat(c.log.map(function(e){
+        return Object.assign({stage:c.time},e);
+      }));
+    }
+  });
+  window.__histLog=allLog;
+  window.__histChain=chain;  // 保存链供 UI 显示
   transformModal(window.__histRpt, window.__histTopic, window.__histLog);
 }
 
@@ -3152,7 +3184,10 @@ function transformModal(rpt, topic, log){
     document.body.appendChild(d); o=d;
   }
   window.__tr={rpt:rpt||'', topic:topic||'', log:log||[]};
-  document.getElementById('maxTitle').textContent='⚡ 成果转化 · 生成文件';
+    document.getElementById('maxTitle').textContent='⚡ 成果转化 · 生成文件';
+    // 是否有合并的多个阶段
+    var chainN=window.__histChain?window.__histChain.length:1;
+    var chainNote=chainN>1?'<div style="background:rgba(0,212,170,.08);border:1px solid var(--tl);color:var(--tl);border-radius:8px;padding:6px 10px;font-size:11px;margin-bottom:10px">🔗 已合并 <b>'+chainN+'</b> 个阶段的同一话题讨论（多轮进阶完整内容）</div>':'';
   // 格式选项
   var fmts=[
     {id:'prompt', n:'🎨 图片生成 Prompt', d:'把结论重写成文生图提示词', m:'gpt',      ext:'.md'},
@@ -3174,7 +3209,8 @@ function transformModal(rpt, topic, log){
   document.getElementById('maxBody').innerHTML=
     '<div style="font-size:13px;line-height:1.7">'
     +'<div style="font-weight:600;margin-bottom:4px">📌 '+esc(topic)+'</div>'
-    +'<div style="font-size:11px;color:var(--txm);margin-bottom:12px">结论摘要：'+esc((rpt||'').replace(/\s+/g,' ').slice(0,90))+'…</div>'
+        +chainNote
+        +'<div style="font-size:11px;color:var(--txm);margin-bottom:12px">结论摘要：'+esc((rpt||'').replace(/\s+/g,' ').slice(0,90))+'…</div>'
     +'<div class="mdst">① 选择输出格式</div>'
     +fmts.map(function(f){
       return '<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;cursor:pointer;background:var(--sf);margin-bottom:5px;font-size:12px">'
@@ -3216,16 +3252,16 @@ function transformRun(){
   // 组装源材料：报告 + 讨论记录(截取)
   var src='【讨论话题】'+t.topic+'\n\n【最终报告】\n'+t.rpt+'\n';
   if(t.log&&t.log.length){
-    src+='\n【讨论过程摘要】\n'+t.log.slice(0,12).map(function(e){
+    src+='\n【讨论过程摘要】\n'+t.log.slice(0,60).map(function(e){
       var n=MI[e.model]?MI[e.model].name:e.model;
-      return '· '+n+'('+(e.role==='guest'?'嘉宾':'评议')+')：'+String(e.content||'').slice(0,150);
+      return '· '+(e.stage?'['+e.stage+'] ':'')+n+'('+(e.role==='guest'?'嘉宾':'评议')+')：'+String(e.content||'').slice(0,200);
     }).join('\n')+'\n';
   }
   if(extra)src+='\n【补充要求】'+extra+'\n';
   var spec={prompt:'生成 Midjourney/文生图可用的图片 Prompt（中文+英文关键词），围绕设备/场景形象化，含主体、环境、风格、镜头、光线、构图等，分组列出',
     html:'生成完整单文件 HTML(含内嵌CSS/JS)，把结论做成深色主题可交互可视化页面，中文界面，含图表/卡片/结构示意，标题用讨论话题',
-    json:'生成结构化 JSON(无注释、可直接解析)，含 topic/summary/key_points/conclusions/data 等字段',
-    md:'生成规范 Markdown 报告(标题层级/列表/表格)，完整呈现讨论结论',
+    json:'生成结构化 JSON(无注释、可直接解析)。若材料含多个阶段（【第1阶段】【第2阶段】…），必须完整保留每个阶段的内容，输出结构：{"topic":"话题","stages":[{"stage":1,"time":"","summary":"","key_points":[],"conclusions":[]}],"final_summary":"","key_points":[],"data":{}}，把每个阶段的报告完整纳入对应stage，不得省略或截断任何阶段的内容',
+    md:'生成规范 Markdown 报告(标题层级/列表/表格)，若含多阶段须逐阶段完整呈现，完整呈现讨论结论',
     docx:'生成 .docx 兼容的 HTML 结构内容(Word 可粘贴识别：用 p/h1/h2/table 标签，不用 div 布局)，完整呈现讨论报告',
     custom:'按用户补充要求生成内容'}[f]||'按要求生成内容';
   var sys='你是文件生成专家'+MI[model].name+'。根据提供的讨论材料，'+spec+'。要求：只输出成品内容本身，不要解释过程，不要用代码块包裹(除非格式本身需要)。';
