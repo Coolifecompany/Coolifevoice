@@ -19,6 +19,10 @@ if !errorlevel! equ 0 (
 
 echo  [1/3] Installing files to: %APPDIR%
 if not exist "%APPDIR%" mkdir "%APPDIR%"
+if exist "%APPDIR%\WebView2\EBWebView" (
+    echo  [INFO] Preserving your chat history (WebView2 data)...
+    echo  [INFO] Data found at %APPDIR%\WebView2\EBWebView
+)
 copy /y "%~dp0CoolifeVO.exe" "%APPDIR%\" >nul
 if errorlevel 1 (
     echo  [ERROR] Failed to copy CoolifeVO.exe
