@@ -3964,21 +3964,39 @@ function trSpeak(text, lang) {
 }
 
 // ════ API ════
-function callM(model, messages, sysPrompt) {
+// callM：非流式模型调用（讨论/评议/总结），带 120s 超时 + 网络失败自动重试 1 次
+function callM(model, messages, sysPrompt, _attempt) {
+  _attempt=_attempt||0;
   var c=cfg[model];
   if(!c.key)return Promise.reject(new Error((MI[model]?MI[model].name:model)+' 未配置 API Key'));
   var url=c.url.replace(/\/+$/,'')+'/chat/completions';
   var msgs=sysPrompt?[{role:'system',content:sysPrompt}].concat(messages):messages;
+  var ctrl=new AbortController();
+  var timer=setTimeout(function(){ctrl.abort();},120000); // 120s 超时（评议/思考模型响应长）
+  // 用户点"停止"时联动中止本次请求
+  if(abCtrl){
+    var _onAb=function(){try{ctrl.abort();}catch(e){}};
+    if(abCtrl.signal.aborted)_onAb();
+    else abCtrl.signal.addEventListener('abort',_onAb,{once:true});
+  }
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
     body:JSON.stringify({model:c.model,messages:msgs,max_tokens:2000,stream:false}),
-    signal:abCtrl?abCtrl.signal:undefined
+    signal:ctrl.signal
   }).then(function(res){
+    clearTimeout(timer);
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
     return res.json();
   }).then(function(data){
     return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'（无响应）';
+  }).catch(function(err){
+    clearTimeout(timer);
+    // 网络失败/超时自动重试 1 次（Failed to fetch 常见于手机网络波动）
+    if(_attempt<1 && err.name!=='AbortError' && !(abCtrl&&abCtrl.signal.aborted)){
+      return sleep(1200).then(function(){return callM(model,messages,sysPrompt,_attempt+1);});
+    }
+    throw err;
   });
 }
 
