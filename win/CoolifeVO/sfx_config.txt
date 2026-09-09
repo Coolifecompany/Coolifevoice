@@ -1,0 +1,7 @@
+;!@Install@!UTF-8!
+Title="CoolifeVO - AI 智能助手 安装"
+BeginPrompt="即将安装 CoolifeVO - AI 智能助手 到你的电脑"
+RunProgram="setup.cmd"
+GUIFlags="8+32+64+256"
+GUIMode="1"
+;!@InstallEnd@!
