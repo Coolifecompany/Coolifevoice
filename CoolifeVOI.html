@@ -2693,6 +2693,8 @@ function discImgAnalyze(dataUrl){
 // 两种模式：新话题（两个AI阅读→GPT汇总主题→讨论）和中途插入（GPT结合当前话题→继续讨论）
 var _folderInput=null;
 function pickFolder(){
+  // ★ Windows 桌面版：直接输入路径扫描（无需上传交互）
+  if(window.__isCoolifeDesktop&&window.__coolifeNative){ showPathInputModal(false); return; }
   var inp=_folderInput;
   if(!inp){
     inp=document.createElement('input');
@@ -2711,6 +2713,8 @@ function pickFolder(){
 // 讨论中"读文件"按钮 —— 中途插入
 function discInsertFolder(){
   if(!dTopic){toast('请先开始讨论','er');return;}
+  // ★ Windows 桌面版：直接输入路径扫描（无需上传交互）
+  if(window.__isCoolifeDesktop&&window.__coolifeNative){ showPathInputModal(true); return; }
   var inp=_folderInput;
   if(!inp){
     inp=document.createElement('input');
@@ -2726,6 +2730,128 @@ function discInsertFolder(){
   };
   inp.click();
 }
+// ★★★ Windows 桌面版：路径输入 → 扫描 → 勾选 → 真实读取 ★★★
+// 浏览器沙箱无法读取本地绝对路径，桌面版通过 WebView2 宿主对象实现
+function showPathInputModal(insertMode){
+  var mo=document.getElementById('maxOverlay');
+  if(!mo){
+    var d=document.createElement('div'); d.id='maxOverlay';
+    d.innerHTML='<div class="maxbg" onclick="closeMax()"></div><div class="maxbox"><div class="maxhdr"><span class="maxt" id="maxTitle">选择文件</span><button class="mdc" onclick="closeMax()">✕</button></div><div class="maxbody" id="maxBody"></div></div>';
+    document.body.appendChild(d); mo=d;
+  }
+  _scanMode=insertMode;
+  document.getElementById('maxTitle').textContent='📂 输入文件夹路径';
+  document.getElementById('maxBody').innerHTML=
+    '<div style="font-size:12px;color:var(--txm);margin-bottom:8px">输入电脑上的文件夹路径（如 <code style="background:var(--sf);padding:2px 5px;border-radius:4px">D:\\我的资料\\方案</code>），程序将扫描该文件夹内的所有文件</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<input id="pathInput" style="flex:1;background:var(--sf);border:1px solid var(--bd);border-radius:8px;color:var(--tx);padding:10px;font-family:inherit;font-size:13px;outline:none" placeholder="例如 D:\\Coolife04\\资料" value="">'
+    +'<button class="pab pri" onclick="scanPathInput()" style="font-size:12px;padding:8px 18px">扫描</button>'
+    +'</div>'
+    +'<div id="pathScanRes" style="margin-top:12px;font-size:12px;color:var(--txm)"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+    +'<button class="pab" onclick="closeMax()" style="font-size:11px;padding:6px 14px;color:var(--txm)">取消</button>'
+    +'</div>';
+  mo.classList.add('open');
+  var inp=document.getElementById('pathInput');
+  setTimeout(function(){ inp.focus(); },100);
+  inp.onkeydown=function(e){ if(e.key==='Enter') scanPathInput(); };
+}
+// 桌面版：扫描指定路径下的所有文件
+function scanPathInput(){
+  var path=document.getElementById('pathInput').value.trim();
+  if(!path){toast('请输入文件夹路径','er');return;}
+  var res=document.getElementById('pathScanRes');
+  res.innerHTML='<div style="color:var(--txm)">⏳ 正在扫描 <b>'+esc(path)+'</b>…</div>';
+  try{
+    var obj=window.__coolifeNative.ScanFolder(path);
+    var data=JSON.parse(obj);
+    if(data.error){ res.innerHTML='<div style="color:var(--dg)">❌ '+esc(data.error)+'</div>'; return; }
+    if(!data.files||!data.files.length){ res.innerHTML='<div style="color:var(--dg)">📂 该文件夹下没有文件</div>'; return; }
+    // 分类统计
+    var textCount=data.files.filter(function(f){return f.type==='text';}).length;
+    var imgCount=data.files.filter(function(f){return f.type==='image';}).length;
+    var otherCount=data.files.length-textCount-imgCount;
+    var html='<div style="font-size:11px;color:var(--txm);margin-bottom:8px">共扫描 <b>'+data.files.length+'</b> 个文件'
+      +(textCount?' · 文本 '+textCount:'')+(imgCount?' · 图片 '+imgCount:'')+(otherCount?' · 其他 '+otherCount:'')
+      +'</div>'
+      +'<div style="max-height:300px;overflow-y:auto;border:1px solid var(--bd);border-radius:8px;padding:4px">';
+    data.files.forEach(function(f,i){
+      var icon=f.type==='image'?'🖼':(f.type==='other'?'📎':'📄');
+      var sz=(f.size/1024).toFixed(1)+'KB';
+      if(f.size>=1048576)sz=(f.size/1048576).toFixed(2)+'MB';
+      html+='<label style="display:flex;align-items:center;gap:6px;padding:5px 6px;cursor:pointer;border-radius:6px" onmouseover="this.style.background=\'var(--sf2)\'" onmouseout="this.style.background=\'transparent\'">'
+        +'<input type="checkbox" checked data-i="'+i+'" class="fselcb" style="accent-color:var(--ac)">'
+        +'<span>'+icon+' '+esc(f.name)+' <span style="color:var(--txm);font-size:10px">('+sz+')</span></span></label>';
+    });
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">'
+      +'<button class="pab" onclick="selFileAll(true)" style="font-size:11px;padding:6px 14px">全选</button>'
+      +'<button class="pab" onclick="selFileAll(false)" style="font-size:11px;padding:6px 14px">全不选</button>'
+      +'<button class="pab pri" onclick="readPathSelectedFiles()" style="font-size:11px;padding:6px 14px">✅ 读取勾选的文件</button>'
+      +'</div>';
+    res.innerHTML=html;
+    // 保存扫描结果供读取
+    window.__scanPathData=data;
+  }catch(e){
+    res.innerHTML='<div style="color:var(--dg)">❌ 扫描失败：'+esc(e.message||e)+'</div>';
+  }
+}
+// 桌面版：读取勾选的文件（真实读内容）
+function readPathSelectedFiles(){
+  var data=window.__scanPathData;
+  if(!data||!data.files){toast('请先扫描文件夹','er');return;}
+  var selected=[];
+  data.files.forEach(function(f,i){
+    var cb=document.querySelector('.fselcb[data-i="'+i+'"]');
+    if(cb&&cb.checked)selected.push(f);
+  });
+  if(!selected.length){toast('请至少勾选一个文件','er');return;}
+  // 进度面板
+  var sc=document.getElementById('discMsgs');
+  var prog=document.createElement('div'); prog.id='readProg'; prog.className='mg2';
+  prog.innerHTML='<div class="ml" style="color:var(--acb)"><span>● 📂 文件读取进度</span></div>'
+    +'<div class="mb" style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:12px">'
+    +'<div style="font-size:12px;color:var(--tx);margin-bottom:8px">扫描到 <b>'+selected.length+'</b> 个文件（路径：'+esc(data.dir)+'）</div>'
+    +'<div id="readProgBar" style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden"><div style="height:100%;width:0%;background:var(--ac);transition:width .3s"></div></div>'
+    +'<div id="readProgTxt" style="font-size:11px;color:var(--txm);margin-top:6px">准备读取…</div>'
+    +'</div>';
+  sc.appendChild(prog); scrollC(sc);
+  closeMax();
+  toast('📂 开始读取 '+selected.length+' 个文件…','ok');
+  var contents=[];
+  var done=0, total=selected.length;
+  selected.forEach(function(f){
+    try{
+      var r=window.__coolifeNative.ReadFile(f.path);
+      var d=JSON.parse(r);
+      if(d.error){
+        contents.push('【文件：'+f.name+'】（读取失败：'+d.error+'）\n');
+      }else if(d.content){
+        contents.push('【文件：'+f.name+'】\n'+d.content+'\n');
+      }else{
+        contents.push('【'+f.name+'】类型：'+(d.type==='image'?'图片（需视觉AI）':'文档')+'，大小 '+(f.size/1024).toFixed(1)+'KB\n');
+      }
+      done++;
+      var pt=document.getElementById('readProgTxt');
+      if(pt)pt.textContent='已读取 ('+done+'/'+total+')：'+f.name;
+      var pbar=document.getElementById('readProgBar');
+      if(pbar)pbar.querySelector('div').style.width=((done/total)*100)+'%';
+    }catch(e){
+      contents.push('【文件：'+f.name+'】（读取异常）\n'); done++;
+    }
+  });
+  setTimeout(function(){
+    var pt=document.getElementById('readProgTxt');
+    if(pt)pt.textContent='✅ 全部 '+total+' 个文件读取完成';
+  },100);
+  setTimeout(function(){
+    var pr=document.getElementById('readProg'); if(pr)pr.remove();
+    var full=contents.join('\n\n');
+    if(_scanMode) discInsertRead(full, [], []);
+    else folderNewTopic(full, [], []);
+  },600);
+}
+
 // 文件选择弹窗
 var _scanMode=false;  // true=中途插入，false=新话题
 function showFileSelectModal(files, insertMode){
