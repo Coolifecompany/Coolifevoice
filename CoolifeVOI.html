@@ -2795,19 +2795,49 @@ function readSelectedFiles(){
     else if(it.type==='text')textFiles.push(it.file);
     else others.push(it.file);
   });
-  // 准备读取文本文件内容
-  toast('📂 正在读取 '+selected.length+' 个文件…','ok');
+  // ═══ 显示扫描结果：进入讨论区并展示"读取进度"过程 ═══
+  if(_scanMode){
+    // 中途插入模式：在讨论区显示读取进度面板
+    var sc=document.getElementById('discMsgs');
+    var prog=document.createElement('div'); prog.id='readProg'; prog.className='mg2';
+    prog.innerHTML='<div class="ml" style="color:var(--acb)"><span>● 📂 文件读取进度</span></div>'
+      +'<div class="mb" style="background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:12px">'
+      +'<div style="font-size:12px;color:var(--tx);margin-bottom:8px">扫描到 <b>'+selected.length+'</b> 个文件：文本 '+textFiles.length+' · 图片 '+imgs.length+' · 其他 '+others.length+'</div>'
+      +'<div id="readProgBar" style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden"><div style="height:100%;width:0%;background:var(--ac);transition:width .3s"></div></div>'
+      +'<div id="readProgTxt" style="font-size:11px;color:var(--txm);margin-top:6px">准备读取…</div>'
+      +'</div>';
+    sc.appendChild(prog); scrollC(sc);
+  }
+  toast('📂 扫描到 '+selected.length+' 个文件，开始读取…','ok');
   var contents=[];
+  var done=0, total=textFiles.length;
   var chain=Promise.resolve();
   textFiles.forEach(function(f){
     chain=chain.then(function(){return new Promise(function(res){
+      // 更新进度：当前正在读取的文件名 + 大小
+      var sz=(f.size/1024).toFixed(1)+'KB';
+      if(f.size>=1048576)sz=(f.size/1048576).toFixed(2)+'MB';
+      var pt=document.getElementById('readProgTxt');
+      if(pt)pt.textContent='正在读取 ('+(done+1)+'/'+total+')：'+f.name+' ('+sz+')';
+      var pbar=document.getElementById('readProgBar');
+      if(pbar)pbar.querySelector('div').style.width=((done/total)*100)+'%';
       var rd=new FileReader();
       rd.onload=function(){
-        var txt=String(rd.result||'').slice(0,60000);
-        contents.push('【文件：'+f.name+'】\n'+(txt.trim()||'(空)')+'\n');
+        var raw=String(rd.result||'');
+        var txt=raw.slice(0,60000);
+        contents.push('【文件：'+f.name+' · '+sz+'】\n'+(txt.trim()||'(空)')+'\n');
+        done++;
+        var pt2=document.getElementById('readProgTxt');
+        if(pt2)pt2.textContent='已读取 ('+done+'/'+total+')：'+f.name;
+        var pbar2=document.getElementById('readProgBar');
+        if(pbar2)pbar2.querySelector('div').style.width=((done/total)*100)+'%';
+        if(done===total){
+          var pt3=document.getElementById('readProgTxt');
+          if(pt3)pt3.textContent='✅ 全部 '+total+' 个文件读取完成';
+        }
         res();
       };
-      rd.onerror=function(){contents.push('【文件：'+f.name+'】（读取失败）\n');res();};
+      rd.onerror=function(){contents.push('【文件：'+f.name+'】（读取失败）\n');done++;res();};
       rd.readAsText(f,'utf-8');
     });});
   });
@@ -2819,6 +2849,12 @@ function readSelectedFiles(){
       contents.push('【其他文档】'+others.map(function(f){return f.name;}).join('、')+'（共'+others.length+'个，如docx/pdf/xlsx需专门的解析AI读取）');
     }
     var full=contents.join('\n\n');
+    // 完成读取：更新进度面板为"理解中"，然后交给 AI
+    if(_scanMode){
+      var pt=document.getElementById('readProgTxt');
+      if(pt)pt.textContent='📖 正在让 AI 阅读并理解 '+selected.length+' 个文件的内容…';
+    }
+    setTimeout(function(){ var pr=document.getElementById('readProg'); if(pr)pr.remove(); },600);
     if(_scanMode) discInsertRead(full, imgs, others);
     else folderNewTopic(full, imgs, others);
   });
@@ -2832,8 +2868,8 @@ function discInsertRead(fullText, imgs, others){
   addHostMsg('📄 你选择了文件夹中的文件，GPT-5.6 正在结合当前话题「'+dTopic+'」阅读并分析…');
   var p='当前讨论话题：'+dTopic+'\n\n已有讨论记录：\n'+ctx+'\n\n'
     +'用户从文件夹中选了以下文件，内容如下：\n\n'+textPart+imgNote+otherNote+'\n\n'
-    +'请完成：\n'
-    +'1. 【文件内容概括】用一段话概括文件的核心内容\n'
+    +'请先认真阅读以上文件内容（不要跳过），然后完成：\n'
+    +'1. 【文件内容概括】用一段话概括文件的核心内容，要包含文件中的具体细节（如具体数据、关键结论、专有名词），证明你真的读过了\n'
     +'2. 【与话题的关联】这些内容与当前讨论话题「'+dTopic+'」有何关联——支持了某个观点、反驳了某个观点、补充了缺失信息，还是提出了新问题？\n'
     +'3. 【你的评估意见】作为GPT-5.6，从讨论角度给出你的判断，并指出哪些点值得继续讨论\n'
     +'输出格式：用【】分隔三个段落，主体用纯文字，避免JSON/表格标记。';
@@ -2873,10 +2909,10 @@ function folderNewTopic(fullText, imgs, others){
   setCtrl(true); abCtrl=new AbortController();
   addHostMsg('📂 已读取勾选的文件，正在让 '+MI[reader1].name+' 和 '+MI[reader2].name+' 分别阅读并提炼讨论主题…');
   var fullContent=textPart+imgNote+otherNote;
-  var sys1='你是'+MI[reader1].name+'（'+MI[reader1].role+'）。请阅读下面的文件内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。';
-  var sys2='你是'+MI[reader2].name+'（'+MI[reader2].role+'）。请阅读下面的文件内容，提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。请尽量与另一位AI的角度不同，提出不同的讨论主题。';
-  var p1='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
-  var p2='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】\n【建议讨论主题】\n【你的初步观点】';
+  var sys1='你是'+MI[reader1].name+'（'+MI[reader1].role+'）。请认真阅读下面的文件内容（不要跳过），提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。';
+    var sys2='你是'+MI[reader2].name+'（'+MI[reader2].role+'）。请认真阅读下面的文件内容（不要跳过），提炼出核心内容，并给出一个你建议讨论的主题（一句话），以及你的初步观点。请尽量与另一位AI的角度不同，提出不同的讨论主题。';
+    var p1='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】（要包含文件中的具体细节，如数据/结论/专有名词，证明你真的读过了）\n【建议讨论主题】\n【你的初步观点】';
+    var p2='文件内容：\n\n'+fullContent+'\n\n请输出：\n【核心概括】（要包含文件中的具体细节，如数据/结论/专有名词，证明你真的读过了）\n【建议讨论主题】\n【你的初步观点】';
   callM(reader1,[{role:'user',content:p1}],sys1).then(function(r1){
     addFolderMsg(reader1,r1);
     dLog.push({role:'guest',model:reader1,action:'文档阅读',content:r1,round:dRnd});
