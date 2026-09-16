@@ -934,25 +934,25 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 <script>
 // ════ MODEL INFO ════
 var MI = {
-  gpt:      {name:'GPT-5.6',     color:'#60a5fa', role:'通用综合·主持人',   emoji:'G'},
-  gemini:   {name:'Gemini 3.7',  color:'#a78bfa', role:'长文档·多模态',     emoji:'Ge'},
-  deepseek: {name:'DeepSeek',    color:'#fb7185', role:'中文专家·中文报告', emoji:'Ds'},
+  gpt:      {name:'GPT-6 Astra', color:'#60a5fa', role:'最新旗舰·主持人',   emoji:'G'},
+  gemini:   {name:'GPT-5.6 Luna',color:'#a78bfa', role:'快速响应·多视角',     emoji:'Lu'},
+  deepseek: {name:'GPT-5.6 Sol', color:'#fb7185', role:'中文专家·中文报告', emoji:'So'},
   opus:     {name:'Opus 4.8',    color:'#34d399', role:'深度推理·工程规划', emoji:'Op'}
 };
 var MODELS = ['gpt','gemini','deepseek','opus'];
 
 var cfg = {
-  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-sol'},
-  gemini:   {key:'sk-nnicykKjLGsuDYbMo71m6jnbUsxKKLKK4ojU1RmdaWC5dQ8D', url:'https://polocn.580ai.net/v1', model:'gemini-3.7-flash'},
-  deepseek: {key:'sk-xsJ2pPRvFHdkddr0xxq8KZDX00DXdLXvcPxZsHfRZKjuqH2X', url:'https://polocn.580ai.net/v1', model:'deepseek-v3.2'},
+  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-6-astra'},
+  gemini:   {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-luna'},
+  deepseek: {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-sol'}},
   opus:     {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1',          model:'claude-opus-4-8-thinking'}
 };
-// 翻译引擎：gpt-5.6-sol（内置，不走思考更快）
-var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-sol'};
+// 翻译引擎：gpt-6-astra（内置最新，不走思考更快）
+var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-6-astra'};
 
 // 写死的 GPT 模型（隐藏且不可改）
 var FIXED_MODEL = 'gpt';
-function fixedGptCfg(){ return {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-5.6-sol'}; }
+function fixedGptCfg(){ return {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-6-astra'}; }
 
 // ════ APP STATE ════
 var appMode = '1v1';
@@ -981,7 +981,7 @@ var dHistId='';   // 当前讨论对应的历史条目 id（同一讨论保存�
 
 // Translation state
 var selTrans = 'gpt';      // model for translation (内置 key 的 GPT)
-var srMode = 'whisper';        // 'browser' | 'whisper'
+var srMode = 'browser';        // 'browser' | 'whisper'（whisper 额度欠费，默认浏览器识别）
 var trSt = 'idle';             // idle | recording | processing | speaking
 var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
