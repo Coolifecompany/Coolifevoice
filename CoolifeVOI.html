@@ -3982,7 +3982,7 @@ function callM(model, messages, sysPrompt, _attempt) {
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-    body:JSON.stringify({model:c.model,messages:msgs,max_tokens:2000,stream:false}),
+    body:JSON.stringify({model:c.model,messages:msgs,max_tokens:4000,stream:false}),
     signal:ctrl.signal
   }).then(function(res){
     clearTimeout(timer);
@@ -4009,7 +4009,7 @@ function callMStream(model, messages, sysPrompt, onDelta) {
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:800,stream:true}),
+    body:JSON.stringify({model:c.model,messages:msgs,temperature:0.2,max_tokens:4000,stream:true}),
     signal:abCtrl?abCtrl.signal:undefined
   }).then(function(res){
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
