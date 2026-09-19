@@ -221,7 +221,9 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 .rpdot.done{background:var(--ac);box-shadow:0 0 6px var(--acg)}
 .rpdot.act{background:var(--tl);box-shadow:0 0 8px var(--tlg);animation:dpa 1s infinite}
 @keyframes dpa{0%,100%{opacity:1}50%{opacity:.5}}
-.dms{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.dms{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:14px;position:relative}
+.followbtn{position:sticky;bottom:10px;align-self:center;z-index:5;display:none;cursor:pointer;background:rgba(108,92,231,.92);color:#fff;border:none;border-radius:20px;padding:7px 16px;font-size:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.followbtn.show{display:block}
 .dms::-webkit-scrollbar{width:5px}
 .dms::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
 .rh{display:flex;align-items:center;gap:10px;margin:3px 0}
@@ -742,7 +744,8 @@ body.dmax #discSc .dms{flex:1;min-height:0}
         <div class="rpd"><div class="rpdot" id="rp0"></div><div class="rpdot" id="rp1"></div><div class="rpdot" id="rp2"></div></div>
         <span class="rpl" id="rpSub" style="margin-left:7px">每 3 轮触发</span>
       </div>
-      <div class="dms" id="discMsgs"></div>
+      <div class="dms" id="discMsgs" onscroll="onDiscScroll(this)"><button class="followbtn" id="followBtn" onclick="goBottom()">⬇ 回到底部看最新</button></div>
+<script>function onDiscScroll(c){var b=document.getElementById("followBtn");if(!b)return;var need=c.scrollHeight-c.scrollTop-c.clientHeight>120;b.classList.toggle("show",need);followOn=!need;}</script>
             <!-- 用户中途参与讨论：输入观点 → AI 回应 -->
             <div class="dui" id="discUserInput" style="display:none">
               <textarea id="discUserTxt" rows="1" placeholder="输入你的观点/问题，插入到讨论中…（Enter 发送，Shift+Enter 换行）" onkeydown="discUserKey(event)" oninput="resize(this)" style="flex:1;min-width:0"></textarea>
@@ -4064,7 +4067,16 @@ function saveCfgLS(){ /* 不保存内置 key 到 localStorage */ }
 
 // ════ UTILS ════
 function rmEl(id){var e=document.getElementById(id);if(e)e.remove();}
-function scrollC(c){requestAnimationFrame(function(){if(c)c.scrollTop=c.scrollHeight;});}
+var followOn=true;
+function nearBottom(c){return c&&(c.scrollHeight-c.scrollTop-c.clientHeight<120);}
+function scrollC(c){requestAnimationFrame(function(){if(!c)return;
+  if(followOn&&nearBottom(c)){c.scrollTop=c.scrollHeight;}
+  updFollowBtn(c);});}
+function updFollowBtn(c){var b=document.getElementById('followBtn');if(!b||!c)return;
+  var need=c.scrollHeight-c.scrollTop-c.clientHeight>120;
+  b.classList.toggle('show',need);}
+function goBottom(){var c=document.getElementById('discMsgs');if(!c)return;
+  followOn=true;c.scrollTop=c.scrollHeight;updFollowBtn(c);}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
 function escA(s){return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/\n/g,' ');}
