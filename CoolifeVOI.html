@@ -4049,16 +4049,29 @@ function trSpeak(text, lang) {
 }
 
 // ════ API ════
-// 公式输出规范：所有模型统一遵守（由前端 KaTeX 渲染）
-var MATH_RULE = '\n\n【公式输出规范】涉及数学/物理等式、化学方程式、生物化学反应时，必须用 LaTeX 输出，否则无法正确排版：'
-  + '1) 独立公式用 $$...$$ 包裹（如 $$E = mc^2$$）；'
-  + '2) 行内符号用 $...$ 包裹（如 $F=ma$）；'
-  + '3) 化学方程式与生物反应式一律用 \\ce{} 包裹，写在 $$ 内（如 $$\\ce{2H2 + O2 -> 2H2O}$$、$$\\ce{6CO2 + 6H2O ->[光照] C6H12O6 + 6O2}$$）；'
-  + '4) \\ce{} 内支持 -> 反应箭头、<=> 可逆、^ 上标、_ 下标、v 沉淀、^ 气体、[条件] 标注；'
-  + '5) 中文条件写在 \\text{} 内（如 ->[\\text{点燃}]）；'
-  + '6) 公式外的普通文字照常用中文，不要给整段文字套 $。';
+// 公式输出规范：所有模型统一遵守（由前端 KaTeX + mhchem 渲染）
+// 设计要点：给出「触发场景 + 语法 + 反例」，模型才会稳定自动调用
+var MATH_RULE = '\n\n【公式输出规范｜必须遵守】本界面已内置 LaTeX 公式渲染器（KaTeX + mhchem），'
+  + '凡涉及以下内容，一律用 LaTeX 输出，禁止用纯文字描述公式：\n'
+  + '▶ 触发场景（命中任一即必须用 LaTeX）：'
+  + '① 数学/物理：任何公式、等式、方程、推导、积分、微分、矩阵、向量、单位、比值、定律（如功率、扭矩、欧姆定律、能量守恒）；'
+  + '② 化学：化学反应式、化学方程式、离子方程式、配平、电离、水解、燃烧、氧化还原、电极反应、沉淀、气体；'
+  + '③ 生物：光合作用、细胞呼吸、ATP、酶催化、代谢途径等生化反应式。\n'
+  + '▶ 写法：'
+  + '1) 独立公式（单独成行）用 $$...$$ 包裹，例：$$E = mc^2$$、$$P = \\frac{Tn}{9550}$$；'
+  + '2) 行内符号（夹在句中）用 $...$ 包裹，例：当 $F=ma$ 时；'
+  + '3) 化学方程式/生化反应式一律用 \\ce{} 包裹，且写在 $$ 内，例：'
+  + '$$\\ce{2H2 + O2 -> 2H2O}$$、$$\\ce{N2 + 3H2 <=> 2NH3}$$、'
+  + '$$\\ce{6CO2 + 6H2O ->[\\text{光照}] C6H12O6 + 6O2}$$、$$\\ce{C6H12O6 + 6O2 -> 6CO2 + 6H2O + \\text{能量}}$$；\n'
+  + '▶ \\ce{} 语法：-> 单向箭头、<=> 可逆、^ 上标/气体、_ 下标、v 沉淀↓、中文条件写 \\text{} 放 [ ] 内（如 ->[\\text{点燃}]）；'
+  + '▶ 单位与数字：物理量带单位时用 \\text{} 或 \\mathrm{}（如 $$g = 9.8\\ \\text{m/s}^2$$）；\n'
+  + '▶ 禁止事项：'
+  + '✗ 不要写「2H2 + O2 → 2H2O」这种纯文本方程（没有正确下标、箭头，无法阅读）；'
+  + '✗ 不要用 `代码块` 包裹公式；'
+  + '✗ 不要给整段普通中文套 $（会误渲染）；'
+  + '✗ 不要解释你怎么用 LaTeX，直接输出结果即可。';
 function withMathRule(sp){
-  if(sp && sp.indexOf('【公式输出规范】') >= 0) return sp;   // 已含则不重复追加
+  if(sp && sp.indexOf('【公式输出规范') >= 0) return sp;   // 已含则不重复追加
   return (sp ? sp : '你是专业、严谨的 AI 助手。') + MATH_RULE;
 }
 // callM：非流式模型调用（讨论/评议/总结），带 120s 超时 + 网络失败自动重试 1 次
@@ -4069,7 +4082,7 @@ function callM(model, messages, sysPrompt, _attempt) {
   var url=c.url.replace(/\/+$/,'')+'/chat/completions';
   var msgs=[{role:'system',content:withMathRule(sysPrompt)}].concat(messages);
   var ctrl=new AbortController();
-  var timer=setTimeout(function(){ctrl.abort();},120000); // 120s 超时（评议/思考模型响应长）
+  var timer=setTimeout(function(){ctrl.abort();},180000); // 180s 超时（推理模型 8000token 输出耗时长）
   // 用户点"停止"时联动中止本次请求
   if(abCtrl){
     var _onAb=function(){try{ctrl.abort();}catch(e){}};
@@ -4079,7 +4092,7 @@ function callM(model, messages, sysPrompt, _attempt) {
   return fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+c.key},
-    body:JSON.stringify({model:c.model,messages:msgs,max_tokens:4000,stream:false}),
+    body:JSON.stringify({model:c.model,messages:msgs,max_tokens:8000,stream:false}),
     signal:ctrl.signal
   }).then(function(res){
     clearTimeout(timer);
@@ -4087,10 +4100,20 @@ function callM(model, messages, sysPrompt, _attempt) {
     return res.json();
   }).then(function(data){
     var _m=data.choices&&data.choices[0]&&data.choices[0].message;
-    return (_m&&(_m.content||_m.reasoning_content))||'（无响应）';
+    var _fin=data.choices&&data.choices[0]&&data.choices[0].finish_reason;
+    var _txt=_m&&_m.content;
+    // 推理模型（如 gpt-6-astra）先思考再作答：思考耗尽 max_tokens 时 content 为空。
+    // 不能退回 reasoning_content（那是思考草稿，会泄漏"我们需要回答用户…"这类过程），
+    // 而是抛错让上层提示用户——同时系统会自动重试一次（给足 token 后通常能出正文）。
+    if(!_txt && _fin==='length'){
+      var _e=new Error('模型思考超长被截断，未能输出正文，请重试或换个说法');
+      _e.name='OutputTruncated';
+      throw _e;
+    }
+    return _txt||(_m&&_m.reasoning_content)||'（无响应）';
   }).catch(function(err){
     clearTimeout(timer);
-    // 网络失败/超时自动重试 1 次（Failed to fetch 常见于手机网络波动）
+    // 网络失败/超时/思考截断自动重试 1 次
     if(_attempt<1 && err.name!=='AbortError' && !(abCtrl&&abCtrl.signal.aborted)){
       return sleep(1200).then(function(){return callM(model,messages,sysPrompt,_attempt+1);});
     }
