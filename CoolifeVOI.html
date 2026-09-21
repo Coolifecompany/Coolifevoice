@@ -937,18 +937,24 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 <script>
 // ════ MODEL INFO ════
 var MI = {
-  gpt:      {name:'GPT-6 Astra', color:'#60a5fa', role:'最新旗舰·主持人',   emoji:'G'},
-  gemini:   {name:'GPT-5.6 Luna',color:'#a78bfa', role:'快速响应·多视角',     emoji:'Lu'},
-  deepseek: {name:'GPT-5.6 Sol', color:'#fb7185', role:'中文专家·中文报告', emoji:'So'},
-  opus:     {name:'Opus 4.8',    color:'#34d399', role:'深度推理·工程规划', emoji:'Op'}
+  gpt:      {name:'GPT-6 Astra',       color:'#60a5fa', role:'通用综合·主持人',     emoji:'G'},
+  gemini:   {name:'Gemini 3 Pro',      color:'#a78bfa', role:'长文档·多模态',       emoji:'Ge'},
+  gemini2:  {name:'Gemini 2.5 Pro',    color:'#c4b5fd', role:'快速响应·多视角',     emoji:'G2'},
+  deepseek: {name:'DeepSeek V4 Pro',   color:'#fb7185', role:'中文专家·中文报告',   emoji:'Ds'},
+  deepseek2:{name:'DeepSeek V4 Flash', color:'#fda4af', role:'快速·轻量',           emoji:'Df'},
+  opus:     {name:'Claude Opus 4.8',   color:'#34d399', role:'深度推理·工程规划',   emoji:'Op'},
+  sonnet:   {name:'Claude Sonnet 4.7', color:'#6ee7b7', role:'平衡·代码',           emoji:'Cs'}
 };
-var MODELS = ['gpt','gemini','deepseek','opus'];
+var MODELS = ['gpt','gemini','gemini2','deepseek','deepseek2','opus','sonnet'];
 
 var cfg = {
-  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-6-astra'},
-  gemini:   {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-luna'},
-  deepseek: {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',          model:'gpt-5.6-sol'},
-  opus:     {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1',          model:'claude-opus-4-8-thinking'}
+  gpt      :{key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-6-astra'},
+  gemini   :{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'gemini-3-pro-preview'},
+  gemini2  :{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'gemini-2.5-pro'},
+  deepseek:{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'deepseek-v4-pro-thinking'},
+  deepseek2:{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'deepseek-v4-flash-thinking'},
+  opus     :{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'claude-opus-4-8-thinking'},
+  sonnet   :{key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'claude-sonnet-4-7-thinking'}
 };
 // 翻译引擎：gpt-6-astra（内置最新，不走思考更快）
 var TRANS_FAST = {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1', model:'gpt-6-astra'};
@@ -990,7 +996,7 @@ var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
 var trAudioChunks = [];
 var trCount = 0;
-var whisperCfg = {key:'sk-dD8g5UM7d8CktwK9lF4KoFDS6srFCpEzzip108kIa3NaE6gf', url:'https://polocn.580ai.net/v1', model:'whisper-1'};
+var whisperCfg = {key:'', url:'', model:'whisper-1'};
 
 // ════ PAPER SEARCH (公开学术 API 速查) ════
 // 自动按讨论话题检索论文，读取标题/作者/年份/摘要作为科学依据
@@ -1458,7 +1464,7 @@ function toggleMulti(k) {
     if (cnt <= 2) { toast('至少需要2个模型','er'); return; }
     selMulti[k] = false;
   } else {
-    if (cnt >= 4) { toast('最多4个模型','er'); return; }
+    if (cnt >= MODELS.length) { toast('最多'+MODELS.length+'个模型','er'); return; }
     selMulti[k] = true;
   }
   buildSetupGrids(); buildSidebar();
@@ -2112,7 +2118,7 @@ function startDisc() {
 }
 
 function assignGuest(topic, cands) {
-  // 规则：除编程/架构类话题外，一律 gpt-5.6-sol 主导（最高权限）
+  // 规则：除编程/架构类话题外，一律 gpt-6-astra 主导（最高权限）
   var tl=topic.toLowerCase();
   var isTech=/代码|编程|架构|算法|工程|bug|debug|开发|软件|program|code|architecture|algorithm/.test(tl);
   if(!isTech&&cands.indexOf('gpt')>=0)return Promise.resolve('gpt');
@@ -2621,7 +2627,7 @@ function newTopicBack(){
 }
 
 // ════ INSERT IMAGE INTO DISCUSSION ════
-// 讨论中插入图片：gpt-5.6-sol 结合当前话题识别图片，
+// 讨论中插入图片：gpt-6-astra 结合当前话题识别图片，
 // 把识别结果整理成文字/JSON/代码注入讨论上下文，其他模型通过文字看到图片内容。
 function discInsertImg(){
   var inp=ensureImgInput();
@@ -3636,7 +3642,7 @@ function startTrans() {
   document.getElementById('hbadge').className='hbadge';
   document.getElementById('hbadge').style.color='var(--dg)';
   document.getElementById('hbadge').style.borderColor='rgba(255,107,138,.3)';
-  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'gpt-5.6-sol').split('-').slice(0,2).join('-')+' Fast';
+  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'gpt-6-astra').split('-').slice(0,2).join('-')+' Fast';
   document.getElementById('trSrLabel').textContent=srMode==='whisper'?'Whisper API 语音识别':'浏览器语音识别';
   trSt='idle';
 }
@@ -3992,7 +3998,8 @@ function callM(model, messages, sysPrompt, _attempt) {
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
     return res.json();
   }).then(function(data){
-    return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'（无响应）';
+    var _m=data.choices&&data.choices[0]&&data.choices[0].message;
+    return (_m&&(_m.content||_m.reasoning_content))||'（无响应）';
   }).catch(function(err){
     clearTimeout(timer);
     // 网络失败/超时自动重试 1 次（Failed to fetch 常见于手机网络波动）

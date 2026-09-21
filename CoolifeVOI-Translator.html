@@ -586,16 +586,16 @@ var MI = {
 var MODELS = ['gpt','gemini','opus','deepseek','sonnet','gptmini','ds32'];
 
 var cfg = {
-  gpt:      {key:'sk-ezVpBL6pUOkuvvuxwsS35rjxkPhlooLFcZgDGMmWOVjwm6Pp', url:'https://xyuapi.top/v1',  model:'gpt-5.6-sol'},
-  gemini:   {key:'', url:'https://xyuapi.top/v1',  model:'gemini-3.1-pro-preview'},
-  opus:     {key:'', url:'https://xyuapi.top/v1',  model:'claude-opus-4-6-thinking'},
-  deepseek: {key:'', url:'https://xyuapi.top/v1',  model:'deepseek-v3.2-thinking'},
-  sonnet:   {key:'', url:'https://xyuapi.top/v1',  model:'claude-sonnet-4-6-thinking'},
-  gptmini:  {key:'', url:'https://poloai.top/v1',  model:'gpt-5-mini'},
-  ds32:     {key:'', url:'https://poloai.top/v1',  model:'deepseek-v3.2'}
+  gpt:      {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1',  model:'gpt-6-astra'},
+  gemini:   {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'gemini-3-pro-preview'},
+  opus:     {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'claude-opus-4-8-thinking'},
+  deepseek: {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'deepseek-v4-pro-thinking'},
+  sonnet:   {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'claude-sonnet-4-7-thinking'},
+  gptmini:  {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'gpt-5.5'},
+  ds32:     {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'deepseek-v4-flash-thinking'}
 };
 
-var TRANS_FAST = {key:'sk-YuhKHucwxk539K8GDEHcwXJjHttJM4C4W9wDBaVnkjNSAIJu', url:'https://polocn.580ai.net/v1', model:'gpt-4.1-mini'};
+var TRANS_FAST = {key:'sk-XDt8xBa8K0gbMRn58GUGtDaZQHYgrq5BzBcK1DCEcQxgtq94', url:'https://xyuapi.top/v1', model:'deepseek-v4-flash-thinking'};
 
 // 写死的 GPT 模型（隐藏且不可改）
 var FIXED_MODEL = 'gpt';
@@ -628,7 +628,7 @@ var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
 var trAudioChunks = [];
 var trCount = 0;
-var whisperCfg = {key:'sk-dD8g5UM7d8CktwK9lF4KoFDS6srFCpEzzip108kIa3NaE6gf', url:'https://polocn.580ai.net/v1', model:'whisper-1'};
+var whisperCfg = {key:'', url:'', model:'whisper-1'};
 
 // ════ INIT ════
 loadCfg();
@@ -1651,7 +1651,7 @@ function startTrans() {
   document.getElementById('hbadge').className='hbadge';
   document.getElementById('hbadge').style.color='var(--dg)';
   document.getElementById('hbadge').style.borderColor='rgba(255,107,138,.3)';
-  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'gpt-4.1-mini').split('-').slice(0,2).join('-')+' Fast';
+  document.getElementById('trEngine').textContent=(TRANS_FAST.model||'deepseek-v4-flash-thinking').split('-').slice(0,2).join('-')+' Fast';
   document.getElementById('trSrLabel').textContent=srMode==='whisper'?'Whisper API 语音识别':'浏览器语音识别';
   trSt='idle';
 }
@@ -1989,7 +1989,8 @@ function callM(model, messages, sysPrompt) {
     if(!res.ok)return res.json().catch(function(){return {};}).then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'HTTP '+res.status);});
     return res.json();
   }).then(function(data){
-    return (data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'（无响应）';
+    var _m=data.choices&&data.choices[0]&&data.choices[0].message;
+    return (_m&&(_m.content||_m.reasoning_content))||'（无响应）';
   });
 }
 
@@ -2009,7 +2010,8 @@ function callMStream(model, messages, sysPrompt, onDelta) {
     // 老浏览器无流式能力时回退非流式
     if(!res.body||!res.body.getReader){
       return res.json().then(function(data){
-        var full=(data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content)||'（无响应）';
+        var _m=data.choices&&data.choices[0]&&data.choices[0].message;
+        var full=(_m&&(_m.content||_m.reasoning_content))||'（无响应）';
         if(onDelta) onDelta(full);
         return full;
       });
@@ -2094,7 +2096,7 @@ function backSetup(){ /* 独立版无返回 */ }
 function showTranslation() {
   var sc=document.getElementById('transSc'); if(sc) sc.style.display='flex';
   var badge=document.getElementById('hbadge'); if(badge) badge.textContent='中英 → 泰语';
-  var e=document.getElementById('trEngine'); if(e) e.textContent=(TRANS_FAST.model||'gpt-4.1-mini').split('-').slice(0,2).join('-')+' Fast';
+  var e=document.getElementById('trEngine'); if(e) e.textContent=(TRANS_FAST.model||'deepseek-v4-flash-thinking').split('-').slice(0,2).join('-')+' Fast';
   var l=document.getElementById('trSrLabel'); if(l) l.textContent=(srMode==='whisper')?'Whisper API 语音识别':'浏览器语音识别';
   trCount=0;
   var c=document.getElementById('trCnt'); if(c) c.textContent='0 条翻译';
