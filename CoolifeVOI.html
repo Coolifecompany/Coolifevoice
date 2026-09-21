@@ -14,6 +14,10 @@
 <meta name="apple-mobile-web-app-title" content="CoolifeVO">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500;600&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<!-- 公式渲染：KaTeX + mhchem(化学/生物方程式) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js" crossorigin="anonymous" onload="window.__mhchemReady=1"></script>
 <style>
 :root{
   --bg:#1a1a2e;--bg-g:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);
@@ -483,6 +487,20 @@ body.dmax #discSc .dms{flex:1;min-height:0}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px}
+/* ══ 公式渲染 KaTeX（物理等式/化学方程式/生物方程式） ══ */
+.katex-block{display:block;margin:10px 0;padding:6px 2px;overflow-x:auto;overflow-y:hidden;
+  text-align:center;background:rgba(108,92,231,.06);border-left:3px solid var(--ac);
+  border-radius:6px;max-width:100%}
+.katex-block::-webkit-scrollbar{height:4px}
+.katex-block::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+.katex-inline{display:inline;padding:0 1px;vertical-align:baseline}
+.katex{font-size:1.06em !important;color:var(--tx)}
+.katex .mord,.katex .mbin,.katex .mrel,.katex .mopen,.katex .mclose{color:var(--tx)}
+.katex-block .katex-display{margin:0}
+.katex-fallback{font-family:'IBM Plex Mono',monospace;font-size:.92em;color:var(--wn);
+  background:rgba(255,209,102,.08);border:1px dashed rgba(255,209,102,.3);
+  border-radius:4px;padding:2px 6px;display:inline-block;margin:2px 0}
+.katex-error{color:var(--dg) !important;font-size:.9em}
 </style>
 </head>
 <body>
@@ -765,7 +783,7 @@ body.dmax #discSc .dms{flex:1;min-height:0}
               <button class="cbt2" id="ctPaper" onclick="paperModal()" title="按话题速查资料：OpenAlex/arXiv学术论文 + Stack汽车维修问答 + NHTSA召回数据，可勾选平台"><span class="ci">📚</span><span>论文</span></button>
               <button class="cbt2" id="ctRpt" onclick="reqReport()"><span class="ci">📋</span><span>报告</span></button>
               <button class="cbt2 tl" id="ctAuto" onclick="togAuto()"><span class="ci">🔄</span><span>自动</span></button>
-              <button class="cbt2 dg" id="ctEnd" onclick="endDisc()"><span class="ci">⏹</span><span>总结</span></button>
+              <button class="cbt2 dg" id="ctEnd" onclick="sumNow()" title="随时中断讨论并生成阶段性总结，可继续"><span class="ci">⏹</span><span>总结</span></button>
             </div>
     </div>
 
@@ -2294,7 +2312,7 @@ function genReport(isManual) {
 }
 
 function reqReport() { if(!dRun)return; var b=document.getElementById('ctRpt'); b.disabled=true; genReport(true).finally(function(){b.disabled=false;}); }
-function contDisc() { setCtrl(true); runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); }
+function contDisc() { dRun=true; dStop=false; setCtrl(true); runRnd(true).catch(function(err){if(err.name!=='AbortError')toast(err.message,'er');setCtrl(false);}); }
 function togAuto() {
   dAuto=!dAuto;
   var btn=document.getElementById('ctAuto');
@@ -2305,7 +2323,22 @@ function togAuto() {
   if(dAuto&&dRun)contDisc();
 }
 
-function endDisc() {
+// ⏹ 随时总结：讨论进行中点击→中断当前轮→立即生成阶段性总结（不跳页，保留现场，可继续）
+function sumNow() {
+  if(!dRun) return;
+  dStop=true;
+  if(abCtrl){ try{abCtrl.abort();}catch(e){} }
+  abCtrl=new AbortController();   // ★ 重建：让总结请求不受刚才的中止影响
+  // 清掉界面上残留的思考中/评议中占位符
+  var c=document.getElementById('discMsgs');
+  var dts=c.querySelectorAll('[id^="dt-"]');
+  for(var i=0;i<dts.length;i++){ if(dts[i].parentNode) dts[i].parentNode.removeChild(dts[i]); }
+  setCtrl(true);
+  addHostMsg('⏹ 收到，已中断讨论，正在生成阶段性总结…');
+  endDisc(true);
+}
+
+function endDisc(stay) {
   dStop=true; setCtrl(true);
   var tid=addDiscThink('gpt',true);
   var ctx=buildCtx();
@@ -2323,10 +2356,32 @@ function endDisc() {
     +'【GPT-5.6 最终结论】\n'
     +'阅读完整讨论后，作为最高权限 AI，给出你的最终判断和结论。';
   callM('gpt',[{role:'user',content:p}],'你是 GPT-5.6，最高权限 AI。你的任务是公平公正地阅读完整讨论，先客观总结各方观点，再给出你自己的最终结论。只输出纯文字。').then(function(reply){
-    rmEl(tid); finalRpt=reply; showFinalSum(reply);
+    rmEl(tid); finalRpt=reply;
+    if(stay){
+      // 原地展示：渲染进讨论区，保留现场，可继续
+      var c=document.getElementById('discMsgs');
+      addHostMsg('📋 阶段性总结（'+dRnd+'轮 · '+dLog.length+'条发言）：');
+      var html='';
+      var parts=parseFinal(reply);
+      var labels=['各方观点回顾','共识部分','分歧部分','GPT-5.6 最终结论'];
+      var icons=['🗣','🤝','⚡','⭐'];
+      for(var i=0;i<parts.length;i++){
+        html+='<div class="sumsec" style="margin-bottom:8px"><div class="suml"><div class="sumlnum">'+(i+1)+'</div><span>'+icons[i]+' '+labels[i]+'</span></div>'
+          +'<div class="sumc'+(i===3?' hi':'')+'" style="font-size:12.5px;line-height:1.55">'+esc(parts[i])+'</div></div>';
+      }
+      var sd=document.createElement('div'); sd.className='hm';
+      sd.innerHTML='<div style="background:rgba(108,92,231,.08);border:1px solid rgba(108,92,231,.25);border-radius:12px;padding:12px">'+html+'</div>';
+      c.appendChild(sd); scrollC(c);
+      dPrevRpt=reply; dContSeed=true;
+      setCtrl(false);
+      addHostMsg('✅ 阶段性总结完成。可点【继续】带着总结结论推进，或点【总结】结束并保存。');
+    } else {
+      showFinalSum(reply);
+    }
   }).catch(function(err){
     rmEl(tid); if(err.name!=='AbortError')toast('报告失败：'+err.message,'er');
-    setCtrl(false); dRun=false;
+    if(stay){ setCtrl(false); addHostMsg('⚠ 阶段性总结生成失败：'+err.message+'（可点【继续】回到讨论，或再点【总结】重试）'); }
+    else { setCtrl(false); dRun=false; }
   });
 }
 
@@ -2527,7 +2582,7 @@ function updStats(){
   document.getElementById('stMod').textContent=briefMode?'简要':(dAuto?'自动':'手动');
   document.getElementById('stConF').style.width=dCons+'%';
 }
-function setCtrl(dis){['ctCont','ctRpt','ctAuto','ctEnd'].forEach(function(id){var e=document.getElementById(id);if(e)e.disabled=dis;});}
+function setCtrl(dis){['ctCont','ctRpt','ctAuto','ctEnd'].forEach(function(id){var e=document.getElementById(id);if(e&&id!=='ctEnd')e.disabled=dis;});}
 
 // ════ SCREEN ════
 function showSc(name){
@@ -3994,13 +4049,25 @@ function trSpeak(text, lang) {
 }
 
 // ════ API ════
+// 公式输出规范：所有模型统一遵守（由前端 KaTeX 渲染）
+var MATH_RULE = '\n\n【公式输出规范】涉及数学/物理等式、化学方程式、生物化学反应时，必须用 LaTeX 输出，否则无法正确排版：'
+  + '1) 独立公式用 $$...$$ 包裹（如 $$E = mc^2$$）；'
+  + '2) 行内符号用 $...$ 包裹（如 $F=ma$）；'
+  + '3) 化学方程式与生物反应式一律用 \\ce{} 包裹，写在 $$ 内（如 $$\\ce{2H2 + O2 -> 2H2O}$$、$$\\ce{6CO2 + 6H2O ->[光照] C6H12O6 + 6O2}$$）；'
+  + '4) \\ce{} 内支持 -> 反应箭头、<=> 可逆、^ 上标、_ 下标、v 沉淀、^ 气体、[条件] 标注；'
+  + '5) 中文条件写在 \\text{} 内（如 ->[\\text{点燃}]）；'
+  + '6) 公式外的普通文字照常用中文，不要给整段文字套 $。';
+function withMathRule(sp){
+  if(sp && sp.indexOf('【公式输出规范】') >= 0) return sp;   // 已含则不重复追加
+  return (sp ? sp : '你是专业、严谨的 AI 助手。') + MATH_RULE;
+}
 // callM：非流式模型调用（讨论/评议/总结），带 120s 超时 + 网络失败自动重试 1 次
 function callM(model, messages, sysPrompt, _attempt) {
   _attempt=_attempt||0;
   var c=cfg[model];
   if(!c.key)return Promise.reject(new Error((MI[model]?MI[model].name:model)+' 未配置 API Key'));
   var url=c.url.replace(/\/+$/,'')+'/chat/completions';
-  var msgs=sysPrompt?[{role:'system',content:sysPrompt}].concat(messages):messages;
+  var msgs=[{role:'system',content:withMathRule(sysPrompt)}].concat(messages);
   var ctrl=new AbortController();
   var timer=setTimeout(function(){ctrl.abort();},120000); // 120s 超时（评议/思考模型响应长）
   // 用户点"停止"时联动中止本次请求
@@ -4032,6 +4099,7 @@ function callM(model, messages, sysPrompt, _attempt) {
 }
 
 // 流式翻译调用：轻参数(temperature 0.2 / max_tokens 800) + SSE 流式输出，简单翻译显著提速
+// 注：翻译链路不注入公式规范（避免译文被 $ 污染），翻译文本中的公式由前端渲染层按原样识别
 function callMStream(model, messages, sysPrompt, onDelta) {
   var c=(model&&model.url)?model:cfg[model];
   if(!c.key)return Promise.reject(new Error((MI[model]?MI[model].name:model)+' 未配置 API Key'));
@@ -4227,6 +4295,240 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./pwa/sw.js').catch(function(){});
   });
 }
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   公式渲染层 KaTeX + mhchem（物理等式 / 化学方程式 / 生物方程式）
+   —— 零侵入设计：用 MutationObserver 监听消息区新增节点，
+      不修改任何已有的 esc() 渲染调用，公式失败自动降级为纯文本。
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+  var KATEX_READY = false, KATEX_TRIED = 0;
+
+  function engineReady(){
+    if(KATEX_READY) return true;
+    if(window.katex && typeof window.katex.renderToString === 'function'){
+      KATEX_READY = true; return true;
+    }
+    return false;
+  }
+
+  // 公式源缓存（用于原始文本 → 公式的往返替换）
+  var SRC = {};
+
+  /* ── 提取公式并转成占位符 ───────────────────────────────
+     支持：$$...$$（独立公式）  \[...\]（独立）  $...$（行内）  \(...\)（行内）
+     \ce{...} 化学/生物方程式（可出现在任意位置）
+  */
+  function extract(text){
+    if(!text || text.indexOf('\\') < 0 && text.indexOf('$') < 0) return {text: text, items: []};
+    var items = [], out = text;
+
+    // 1) 独立公式 $$...$$ /\ \[...\]
+    out = out.replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, function(m, a, b){
+      var tex = (a !== undefined ? a : b).trim();
+      if(!tex) return m;
+      var key = '@@MATHB' + items.length + '@@';
+      items.push({tex: tex, display: true, key: key});
+      return key;
+    });
+
+    // 2) \ce{...} 化学/生物方程式（含嵌套花括号）
+    //    独立成行 → 块级；夹在文字中 → 行内（避免把整段句子拆断）
+    var guard = 0;
+    while(out.indexOf('\\ce{') >= 0 && guard++ < 60){
+      var i = out.indexOf('\\ce{');
+      var depth = 0, j = i + 3, end = -1;
+      for(; j < out.length; j++){
+        if(out[j] === '{') depth++;
+        else if(out[j] === '}'){ depth--; if(depth === 0){ end = j; break; } }
+      }
+      if(end < 0) break;
+      var body = out.slice(i + 4, end);          // \ce{ 之后到匹配 }
+      if(body.indexOf('|') === 0) body = body.slice(1);   // \ce{|...} 去竖线
+      var tex = '\\ce{' + body + '}';
+      // 判断是否独立成行：前后只允许空白/换行
+      var before = out.slice(0, i), after = out.slice(end + 1);
+      var lineStart = before.lastIndexOf('\n');
+      var lineEnd = after.indexOf('\n');
+      var headPart = lineStart < 0 ? before : before.slice(lineStart + 1);
+      var tailPart = lineEnd < 0 ? after : after.slice(0, lineEnd);
+      var standalone = headPart.trim() === '' && tailPart.trim() === '';
+      var key = (standalone ? '@@MATHC' : '@@MATHi') + items.length + '@@';
+      items.push({tex: tex, display: standalone, key: key});
+      out = out.slice(0, i) + key + out.slice(end + 1);
+    }
+
+    // 3) 行内公式 $...$（避免误伤货币金额：要求 $ 后非数字，或 $...$ 内含 LaTeX 特征）
+    out = out.replace(/\$([^$\n]+?)\$/g, function(m, tex){
+      var t = tex.trim();
+      if(!t) return m;
+      // 纯数字/货币 → 不动
+      if(/^[\d,.\s]+$/.test(t)) return m;
+      var hasTex = /[\\^_{}]/.test(t) || /^[A-Za-z]\s*=/.test(t);
+      if(!hasTex) return m;
+      var key = '@@MATHI' + items.length + '@@';
+      items.push({tex: t, display: false, key: key});
+      return key;
+    });
+
+    // 4) \(...\) 行内
+    out = out.replace(/\\\(([\s\S]+?)\\\)/g, function(m, tex){
+      var t = tex.trim(); if(!t) return m;
+      var key = '@@MATHI' + items.length + '@@';
+      items.push({tex: t, display: false, key: key});
+      return key;
+    });
+
+    return {text: out, items: items};
+  }
+
+  function escStr(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // 渲染单个公式为 HTML；失败则原样回显（降级不破坏阅读）
+  function renderOne(it){
+    try{
+      return window.katex.renderToString(it.tex, {
+        displayMode: it.display,
+        throwOnError: false,
+        strict: false,
+        trust: false,
+        output: 'html'
+      });
+    }catch(e){
+      return it.display
+        ? '<pre class="katex-fallback">' + escStr(it.tex) + '</pre>'
+        : '<code class="katex-fallback">' + escStr(it.tex) + '</code>';
+    }
+  }
+
+  /* ── 处理一个已渲染的 DOM 节点：把文本中的公式替换成 KaTeX ── */
+  function processNode(node){
+    if(!engineReady()) return;
+    if(!node) return;
+    if(node.nodeType === 1){
+      // 跳过不应处理的区域
+      if(/^(SCRIPT|STYLE|TEXTAREA|INPUT|CODE|PRE)$/.test(node.tagName)) {
+        // code/pre 内部允许公式（AI 常把公式放代码块），但 KaTeX 自身不递归
+        if(node.tagName === 'SCRIPT' || node.tagName === 'STYLE' ||
+           node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') return;
+      }
+      if(node.classList && node.classList.contains('katex')) return;
+    }
+    if(node.nodeType !== 3){  // 文本节点
+      var kids = node.childNodes;
+      for(var i = kids.length - 1; i >= 0; i--) processNode(kids[i]);
+      return;
+    }
+
+    var raw = node.nodeValue;
+    if(!raw) return;
+    if(raw.indexOf('$') < 0 && raw.indexOf('\\ce{') < 0 &&
+       raw.indexOf('\\(') < 0 && raw.indexOf('\\[') < 0) return;
+
+    var res = extract(raw);
+    if(!res.items.length) return;
+
+    // 用 DocumentFragment 替换：文本 → [文本, 公式, 文本, 公式...]
+    var frag = document.createDocumentFragment();
+    var parts = res.text.split(/(@@MATH[BCIi]\d+@@)/);
+    for(var k = 0; k < parts.length; k++){
+      var seg = parts[k];
+      if(!seg) continue;
+      var mm = /^@@MATH([BCIi])(\d+)@@$/.exec(seg);
+      if(mm){
+        var it = res.items[parseInt(mm[2], 10)];
+        if(!it) { frag.appendChild(document.createTextNode(seg)); continue; }
+        var span = document.createElement(it.display ? 'div' : 'span');
+        span.className = it.display ? 'katex-block' : 'katex-inline';
+        span.innerHTML = renderOne(it);
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(document.createTextNode(seg));
+      }
+    }
+    if(node.parentNode) node.parentNode.replaceChild(frag, node);
+  }
+
+  /* ── 扫描容器内所有文本节点 ─────────────────────────── */
+  function scan(root){
+    if(!engineReady() || !root) return;
+    if(root.nodeType === 3){ processNode(root); return; }
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        if(!n.nodeValue) return NodeFilter.FILTER_REJECT;
+        var v = n.nodeValue;
+        if(v.indexOf('$') < 0 && v.indexOf('\\ce{') < 0 &&
+           v.indexOf('\\(') < 0 && v.indexOf('\\[') < 0) return NodeFilter.FILTER_REJECT;
+        var p = n.parentNode;
+        while(p && p !== root){
+          if(p.classList && (p.classList.contains('katex') || p.classList.contains('katex-block') ||
+             p.classList.contains('katex-inline') || p.classList.contains('katex-fallback')))
+            return NodeFilter.FILTER_REJECT;
+          p = p.parentNode;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var targets = [], n;
+    while((n = walker.nextNode())) targets.push(n);
+    for(var i = 0; i < targets.length; i++) processNode(targets[i]);
+  }
+
+  /* ── 监听整个文档：新消息一出现就渲染公式 ─────────────── */
+  function startObserver(){
+    var obs = new MutationObserver(function(muts){
+      if(!engineReady()) return;
+      for(var i = 0; i < muts.length; i++){
+        var m = muts[i];
+        if(m.type === 'childList'){
+          for(var j = 0; j < m.addedNodes.length; j++){
+            var nd = m.addedNodes[j];
+            if(nd.nodeType === 1){
+              scan(nd);
+            } else if(nd.nodeType === 3){
+              processNode(nd);
+            }
+          }
+        } else if(m.type === 'characterData'){
+          processNode(m.target);
+        }
+      }
+    });
+    obs.observe(document.body, {childList: true, subtree: true, characterData: true});
+  }
+
+  /* ── 引擎加载等待（CDN 可能慢，最多等 20 秒） ────────── */
+  function waitEngine(cb){
+    if(engineReady()){ cb(); return; }
+    KATEX_TRIED++;
+    if(KATEX_TRIED > 100){ cb(); return; }   // 20s 后放弃（保持纯文本显示）
+    setTimeout(function(){ waitEngine(cb); }, 200);
+  }
+
+  function boot(){
+    waitEngine(function(){
+      if(!engineReady()){
+        console.warn('[公式] KaTeX 未加载（可能离线或 CDN 不可达），公式将以纯文本显示');
+        return;
+      }
+      startObserver();
+      scan(document.body);
+      console.log('[公式] KaTeX + mhchem 已就绪');
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else { boot(); }
+
+  // 暴露给外部（供手动触发全量重扫）
+  window.renderMathScan = function(root){ scan(root || document.body); };
+  window.extractMath = extract;
+})();
 </script>
 </body>
 
