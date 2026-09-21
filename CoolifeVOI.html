@@ -615,8 +615,12 @@ body.dmax #discSc .dms{flex:1;min-height:0}
           <div class="mg" id="g1v1"></div>
         </div>
         <div id="blkMulti" style="display:none">
-          <div class="slbl">参与模型（含 GPT 主持人，选 2–4 个）</div>
+          <div class="slbl">参与模型（含 GPT 主持人，选 2–7 个，可手动改）</div>
           <div class="mg" id="gMulti"></div>
+          <div style="display:flex;gap:8px;margin:8px 0 2px;flex-wrap:wrap">
+            <button class="pab" onclick="applyPreset('brief')" style="flex:1;justify-content:center" title="自动勾选快问快答组">⚡ 快问快答组</button>
+            <button class="pab" onclick="applyPreset('deep')" style="flex:1;justify-content:center" title="自动勾选深度思考组">🧠 深度思考组</button>
+          </div>
           <div class="slbl">讨论话题</div>
           <textarea class="tinp" id="topicInp" rows="3" placeholder="例如：大语言模型是否真的具备推理能力？"></textarea>
           <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
@@ -969,6 +973,8 @@ var runMode = 'manual';
 var briefMode = false;    // 简要模式：各模型回复限字数，快速收敛话题
 var sel1v1  = 'gpt';
 var selMulti = {gpt:true};
+var PRESET_BRIEF = ['gpt','gemini2','deepseek2'];              // ⚡快问快答组：GPT-6·Gemini2.5·DS闪
+var PRESET_DEEP  = ['gpt','gemini','deepseek','opus','sonnet']; // 🧠深度思考组：GPT-6·Gemini3·DS Pro·Opus·Sonnet
 var vpOn = false;
 var isProc = false;
 var chatHist = [];
@@ -1458,6 +1464,15 @@ function buildSetupGrids() {
   });
 }
 
+// 一键应用预设组（不改简要开关，只换勾选；用户可再手动增减）
+function applyPreset(which){
+  var preset=which==='brief'?PRESET_BRIEF:PRESET_DEEP;
+  selMulti={};
+  preset.forEach(function(k){ if(cfg[k]&&cfg[k].key) selMulti[k]=true; });
+  buildSetupGrids(); buildSidebar();
+  toast(which==='brief'?'⚡ 已勾选快问快答组（可手动改）':'🧠 已勾选深度思考组（可手动改）','ok');
+}
+
 function toggleMulti(k) {
   var cnt = Object.keys(selMulti).filter(function(x){return selMulti[x];}).length;
   if (selMulti[k]) {
@@ -1516,7 +1531,8 @@ function selRunMode(m) {
   document.getElementById('rmA').className = 'rmb' + (m==='auto'?' active tl':'');
 }
 
-// ⚡ 简要模式：切换开关，开启后各模型回复限字数（默认 200 字）
+// ⚡ 简要模式：切换开关。开启→自动勾选快问快答组；关闭→自动勾选深度思考组。
+// 自动勾选只是默认，用户随时可手动增减（toggleMulti 不受模式限制）。
 function selBriefMode(){
   briefMode=!briefMode;
   var b=document.getElementById('rmB');
@@ -1526,7 +1542,12 @@ function selBriefMode(){
   }
   var sm=document.getElementById('stMod');
   if(sm) sm.textContent=briefMode?'简要':'手动';
-  toast(briefMode?'⚡ 简要模式已开启（回复≤200字，快速收敛）':'简要模式已关闭','ok');
+  // 自动勾选预设组（只动 selMulti，不锁死，用户可再手动改）
+  var preset=briefMode?PRESET_BRIEF:PRESET_DEEP;
+  selMulti={};
+  preset.forEach(function(k){ if(cfg[k]&&cfg[k].key) selMulti[k]=true; });
+  buildSetupGrids(); buildSidebar();
+  toast(briefMode?'⚡ 简要模式已开启（回复≤200字，快问快答组已勾选，可手动改）':'🧠 已切回深度思考组（可手动改）','ok');
 }
 
 function handleStart() {
