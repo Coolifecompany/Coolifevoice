@@ -4065,6 +4065,11 @@ var MATH_RULE = '\n\n【公式输出规范｜必须遵守】本界面已内置 L
   + '$$\\ce{6CO2 + 6H2O ->[\\text{光照}] C6H12O6 + 6O2}$$、$$\\ce{C6H12O6 + 6O2 -> 6CO2 + 6H2O + \\text{能量}}$$；\n'
   + '▶ \\ce{} 语法：-> 单向箭头、<=> 可逆、^ 上标/气体、_ 下标、v 沉淀↓、中文条件写 \\text{} 放 [ ] 内（如 ->[\\text{点燃}]）；'
   + '▶ 单位与数字：物理量带单位时用 \\text{} 或 \\mathrm{}（如 $$g = 9.8\\ \\text{m/s}^2$$）；\n'
+  + '▶ 货币与金额（重要，避免与公式冲突）：'
+  + '写金额时优先用货币代码或中文（如 USD 12,500、RMB 90,000、85,000 令吉、12.5万元），'
+  + '或把 $ 放在数字后（如 12,500 USD）；'
+  + '不要在同一段里既用 $ 表示美元又用 $ 包裹公式（如「$100 和 $F=ma$」容易混淆）；'
+  + '金额一律不要渲染成公式。\n'
   + '▶ 禁止事项：'
   + '✗ 不要写「2H2 + O2 → 2H2O」这种纯文本方程（没有正确下标、箭头，无法阅读）；'
   + '✗ 不要用 `代码块` 包裹公式；'
@@ -4382,18 +4387,42 @@ if('serviceWorker' in navigator){
       out = out.slice(0, i) + key + out.slice(end + 1);
     }
 
-    // 3) 行内公式 $...$（避免误伤货币金额：要求 $ 后非数字，或 $...$ 内含 LaTeX 特征）
-    out = out.replace(/\$([^$\n]+?)\$/g, function(m, tex){
-      var t = tex.trim();
-      if(!t) return m;
-      // 纯数字/货币 → 不动
-      if(/^[\d,.\s]+$/.test(t)) return m;
-      var hasTex = /[\\^_{}]/.test(t) || /^[A-Za-z]\s*=/.test(t);
-      if(!hasTex) return m;
-      var key = '@@MATHI' + items.length + '@@';
-      items.push({tex: t, display: false, key: key});
-      return key;
-    });
+    // 3) 行内公式 $...$ —— 手工扫描（关键：失败的候选不能"吃掉"后面的真公式）
+    //    典型坑：`单价 $100，公式 $P=UI$` —— 若用一条正则 replace，`$100，公式 $`
+    //    被判定不是公式后仍会整体消费，导致后面的 $P=UI$ 永远匹配不到。
+    var isMathy = function(t){
+      if(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(t)) return false;  // 含中文/全角 → 不是公式
+      if(/^[\d,.\s]+$/.test(t)) return false;                                  // 纯数字/货币
+      if(/^[\s]*$/.test(t)) return false;
+      // 价格区间（$100-$200 / $95-105）：数字打头且只有数字与连字符 → 货币区间，非公式
+      if(/^\d[\d,.]*\s*[-–—~至到]\s*\d[\d,.]*$/.test(t)) return false;
+      // 数字打头 + 无等号且无字母 → 不是公式（如 "100 x 5" 这种裸算术也不渲染，避免把金额误判）
+      if(/^\d/.test(t) && !/^[0-9\s]*[A-Za-z]/.test(t) && t.indexOf('=') < 0) return false;
+      // 只允许公式常见字符
+      if(!/^[A-Za-z0-9\s+\-*/=^_{}\\()[\].,·|!:;<>'"?±×÷√∫∑∏π∞°%&~]*$/.test(t)) return false;
+      if(/[=^_{}\\()\[\]<>±×÷√∫∑∏π∞]/.test(t)) return true;                   // 有等号/上下标/命令/括号
+      if(/[A-Za-z]/.test(t) && /[+\-*/]/.test(t)) return true;                  // 有字母+运算符（a+b）
+      if(/^[A-Za-z][A-Za-z0-9]{0,2}$/.test(t)) return true;                    // 单变量 m / x / v0
+      return false;
+    };
+    var p3 = 0, g3 = 0;
+    while(g3++ < 120){
+      var s1 = out.indexOf('$', p3);
+      if(s1 < 0) break;
+      if(out.charAt(s1 + 1) === '$'){ p3 = s1 + 2; continue; }   // 跳过块级 $$
+      var s2 = out.indexOf('$', s1 + 1);
+      if(s2 < 0) break;                                          // 未闭合 → 放弃
+      if(out.slice(s1 + 1, s2).indexOf('\n') >= 0){ p3 = s1 + 1; continue; }  // 不跨行
+      var _c = out.slice(s1 + 1, s2), _t = _c.trim();
+      if(_t && isMathy(_t)){
+        var _k = '@@MATHI' + items.length + '@@';
+        items.push({tex: _t, display: false, key: _k});
+        out = out.slice(0, s1) + _k + out.slice(s2 + 1);
+        p3 = s1 + _k.length;
+      } else {
+        p3 = s1 + 1;   // ★ 原地前进一格：让 s2 成为下一次的候选开括号
+      }
+    }
 
     // 4) \(...\) 行内
     out = out.replace(/\\\(([\s\S]+?)\\\)/g, function(m, tex){
