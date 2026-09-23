@@ -4531,6 +4531,28 @@ if('serviceWorker' in navigator){
   }
 
   /* ── 监听整个文档：新消息一出现就渲染公式 ─────────────── */
+  // 防抖修复：流式输出时 characterData 每字符触发一次渲染，会卡死页面。
+  // 改为 150ms 防抖批处理 + processed 弱缓存避免重复扫描。
+  var PEND = new WeakSet();
+  var dTimer = null;
+  var dQueue = [];
+  function queueNode(nd){
+    if(PEND.has(nd)) return;
+    PEND.add(nd);
+    dQueue.push(nd);
+    if(dTimer) return;
+    dTimer = setTimeout(function(){
+      dTimer = null;
+      var q = dQueue; dQueue = [];
+      for(var i=0;i<q.length;i++){
+        var n = q[i];
+        try{
+          if(n.nodeType === 3) processNode(n);
+          else if(n.nodeType === 1 && document.contains(n)) scan(n);
+        }catch(e){}
+      }
+    }, 150);
+  }
   function startObserver(){
     var obs = new MutationObserver(function(muts){
       if(!engineReady()) return;
@@ -4538,15 +4560,12 @@ if('serviceWorker' in navigator){
         var m = muts[i];
         if(m.type === 'childList'){
           for(var j = 0; j < m.addedNodes.length; j++){
-            var nd = m.addedNodes[j];
-            if(nd.nodeType === 1){
-              scan(nd);
-            } else if(nd.nodeType === 3){
-              processNode(nd);
-            }
+            queueNode(m.addedNodes[j]);
           }
         } else if(m.type === 'characterData'){
-          processNode(m.target);
+          // 只在流式“最终稳定”后处理：文本节点频繁变化时由防抖合并
+          PEND.delete(m.target);
+          queueNode(m.target);
         }
       }
     });
