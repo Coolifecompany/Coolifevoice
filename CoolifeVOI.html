@@ -1036,7 +1036,7 @@ var dHistId='';   // 当前讨论对应的历史条目 id（同一讨论保存�
 
 // Translation state
 var selTrans = 'gpt';      // model for translation (内置 key 的 GPT)
-var srMode = 'browser';        // 'browser' | 'whisper'（whisper 额度欠费，默认浏览器识别）
+var srMode = 'whisper';        // 'whisper'（Groq API，默认）| 'browser'（浏览器识别兜底）
 var trSt = 'idle';             // idle | recording | processing | speaking
 var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
@@ -1843,28 +1843,132 @@ function speakNextChunk(){
 }
 
 // ════ MIC INPUT (text field) ════
+// 主对话麦克风：优先 Whisper API（MediaRecorder 录音 → 上传转写）。
+// 浏览器 SpeechRecognition 在 Android WebView 里通常不存在，故仅作末位兜底。
+var micRec = null, micStream = null, micChunks = [], micBusy = false;
+
+function micSetIdle() {
+  isRec = false;
+  var btn = document.getElementById('micBtn');
+  if (btn) btn.classList.remove('rec');
+}
+
+function micRecordThen(onBlob) {
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    micStream = stream;
+    micChunks = [];
+    var mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    micRec = new MediaRecorder(stream, { mimeType: mt });
+    micRec.ondataavailable = function (e) { if (e.data && e.data.size > 0) micChunks.push(e.data); };
+    micRec.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      if (!micChunks.length) { onBlob(null); return; }
+      onBlob(new Blob(micChunks, { type: 'audio/webm' }));
+    };
+    micRec.onerror = function () { stream.getTracks().forEach(function (t) { t.stop(); }); onBlob(null); };
+    micRec.start();
+  }).catch(function (err) {
+    var n = err && err.name || '';
+    var m = { NotAllowedError: '麦克风权限被拒绝（请在系统设置里允许）',
+              NotFoundError: '未找到麦克风设备',
+              NotReadableError: '麦克风被其它应用占用' };
+    toast(m[n] || ('无法访问麦克风: ' + (err && err.message || n)), 'er');
+    onBlob(null);
+  });
+}
+
+// WebM/opus 缺时长头会让部分后端报 "full EBML parser"，先解码重封装成标准 WAV
+function micBlobToWav(blob) {
+  if (!blob) return Promise.resolve(null);
+  try {
+    return blob.arrayBuffer().then(function (buf) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      var ctx = new AC();
+      return ctx.decodeAudioData(buf).then(function (audio) {
+        var sr = audio.sampleRate, ch = audio.numberOfChannels, len = audio.length;
+        var ab = new ArrayBuffer(44 + len * ch * 2), v = new DataView(ab);
+        var w = function (o, x) { for (var i = 0; i < x.length; i++) v.setUint8(o + i, x.charCodeAt(i)); };
+        w(0, 'RIFF'); v.setUint32(4, 36 + len * ch * 2, true); w(8, 'WAVE');
+        w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+        v.setUint16(22, ch, true); v.setUint32(24, sr, true);
+        v.setUint32(28, sr * ch * 2, true); v.setUint16(32, ch * 2, true); v.setUint16(34, 16, true);
+        w(36, 'data'); v.setUint32(40, len * ch * 2, true);
+        var off = 44, chs = [];
+        for (var c = 0; c < ch; c++) chs.push(audio.getChannelData(c));
+        for (var i = 0; i < len; i++) for (var c2 = 0; c2 < ch; c2++) {
+          var s = Math.max(-1, Math.min(1, chs[c2][i]));
+          v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true); off += 2;
+        }
+        try { ctx.close(); } catch (e) {}
+        return new Blob([ab], { type: 'audio/wav' });
+      }).catch(function () { return blob; });
+    }).catch(function () { return blob; });
+  } catch (e) { return Promise.resolve(blob); }
+}
+
+function whisperUpload(blob, onText, onFail) {
+  var url = whisperCfg.url.replace(/\/+$/, '') + '/audio/transcriptions';
+  var fd = new FormData();
+  fd.append('file', blob, 'audio.wav');
+  fd.append('model', whisperCfg.model || 'whisper-1');
+  fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + whisperCfg.key }, body: fd })
+    .then(function (res) {
+      if (!res.ok) return res.json().catch(function () { return {}; })
+        .then(function (e) { throw new Error((e.error && e.error.message) || ('HTTP ' + res.status)); });
+      return res.json();
+    })
+    .then(function (d) { onText((d.text || '').trim()); })
+    .catch(function (err) { onFail(err); });
+}
+
 function toggleMicInput() {
-  var btn=document.getElementById('micBtn');
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){toast('请使用 Chrome 或 Edge','er');return;}
-  if(isRec){if(recObj)recObj.stop();isRec=false;btn.classList.remove('rec');return;}
-  recObj=new SR(); recObj.lang='zh-CN'; recObj.continuous=true; recObj.interimResults=true;
-  var fin='';
-  recObj.onstart=function(){isRec=true;btn.classList.add('rec');toast('🎙 正在聆听…','ok');};
-  recObj.onresult=function(e){
-    var inter='';
-    for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal)fin+=e.results[i][0].transcript;
-      else inter+=e.results[i][0].transcript;
+  var btn = document.getElementById('micBtn');
+  if (isRec) { if (micRec) micRec.stop(); else micSetIdle(); return; }
+  if (micBusy) return;
+  var el = document.getElementById('ci');
+
+  // ① 首选 Whisper API —— 不依赖浏览器语音识别，Android WebView 同样可用
+  if (whisperCfg.key && whisperCfg.url && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    micBusy = true; isRec = true;
+    if (btn) btn.classList.add('rec');
+    toast('🎙 录音中…再点一次结束', 'ok');
+    micRecordThen(function (blob) {
+      micBusy = false; micSetIdle();
+      if (!blob) return;
+      toast('⏳ Whisper 转写中…', 'ok');
+      micBlobToWav(blob).then(function (wav) {
+        whisperUpload(wav || blob, function (text) {
+          if (text) { el.value = text; resize(el); toast('✅ 已转写', 'ok'); }
+          else toast('未识别到语音', 'er');
+        }, function (err) {
+          // 403 多为区域限制/需代理；网络类失败也一并提示，不静默吞掉
+          toast('Whisper 失败: ' + err.message, 'er');
+        });
+      });
+    });
+    return;
+  }
+
+  // ② 兜底：浏览器 SpeechRecognition（桌面 Chrome/Edge 才有）
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('当前环境不支持语音录入', 'er'); return; }
+  recObj = new SR(); recObj.lang = 'zh-CN'; recObj.continuous = true; recObj.interimResults = true;
+  var fin = '';
+  recObj.onstart = function () { isRec = true; if (btn) btn.classList.add('rec'); toast('🎙 正在聆听…', 'ok'); };
+  recObj.onresult = function (e) {
+    var inter = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+      else inter += e.results[i][0].transcript;
     }
-    var el=document.getElementById('ci'); el.value=fin+inter; resize(el);
+    el.value = fin + inter; resize(el);
   };
-  recObj.onerror=function(e){
-    var m={'not-allowed':'麦克风权限被拒绝','no-speech':'未检测到语音','network':'网络错误','audio-capture':'未找到麦克风'};
-    toast(m[e.error]||'语音错误: '+e.error,'er'); isRec=false; btn.classList.remove('rec');
+  recObj.onerror = function (e) {
+    var m = { 'not-allowed': '麦克风权限被拒绝', 'no-speech': '未检测到语音', 'network': '网络错误', 'audio-capture': '未找到麦克风' };
+    toast(m[e.error] || ('语音错误: ' + e.error), 'er'); micSetIdle();
   };
-  recObj.onend=function(){isRec=false;btn.classList.remove('rec');};
-  try{recObj.start();}catch(err){toast('启动失败: '+err.message,'er');}
+  recObj.onend = function () { micSetIdle(); };
+  try { recObj.start(); } catch (err) { toast('启动失败: ' + err.message, 'er'); }
 }
 
 // ════ PURE VOICE CHAT (hands-free loop) ════
@@ -1912,6 +2016,9 @@ function exitVC() {
   vcOn=false;
   stopVAD();
   if(vcRec){try{vcRec.stop();}catch(e){}vcRec=null;}
+  vcStopRec();
+  if (vcMediaStream) { try { vcMediaStream.getTracks().forEach(function(t){t.stop();}); } catch(e){} vcMediaStream=null; }
+  vcAudioCleanup();
   if(window.speechSynthesis)window.speechSynthesis.cancel();
   vcSt='idle';
   document.getElementById('vco').classList.remove('open');
@@ -1972,10 +2079,106 @@ function vcToggle() {
   vcOn=true; vcListen();
 }
 
+// ════ 语音录制（Whisper 路径）：MediaRecorder + 静音自动结束 ════
+var vcMediaRec = null, vcMediaStream = null, vcChunks = [];
+var vcAudioCtx = null, vcAnalyser = null, vcSilTimer = null, vcMaxTimer = null;
+
+function vcAudioCleanup() {
+  if (vcSilTimer) { clearInterval(vcSilTimer); vcSilTimer = null; }
+  if (vcMaxTimer) { clearTimeout(vcMaxTimer); vcMaxTimer = null; }
+  if (vcAudioCtx) { try { vcAudioCtx.close(); } catch (e) {} vcAudioCtx = null; }
+  vcAnalyser = null;
+}
+
+function vcStopRec() {
+  if (vcMediaRec && vcMediaRec.state === 'recording') { try { vcMediaRec.stop(); } catch (e) {} }
+}
+
+// 音量监测：检测到说话后，静音 1.2 秒自动结束；最长 15 秒
+function vcSilenceWatch(stream, onSilence) {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    vcAudioCtx = new AC();
+    var src = vcAudioCtx.createMediaStreamSource(stream);
+    vcAnalyser = vcAudioCtx.createAnalyser();
+    vcAnalyser.fftSize = 1024;
+    src.connect(vcAnalyser);
+    var buf = new Uint8Array(vcAnalyser.fftSize);
+    var spoke = false, silMs = 0, step = 100;
+    vcSilTimer = setInterval(function () {
+      if (!vcAnalyser) return;
+      vcAnalyser.getByteTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
+      var rms = Math.sqrt(sum / buf.length);
+      if (rms > 0.035) { spoke = true; silMs = 0; }
+      else if (spoke) { silMs += step; if (silMs >= 1200) onSilence(); }
+    }, step);
+    vcMaxTimer = setTimeout(onSilence, 15000);
+  } catch (e) {
+    vcMaxTimer = setTimeout(onSilence, 8000);   // 无法分析音量 → 靠时限结束
+  }
+}
+
+function vcRecordStart(onDone) {
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    vcMediaStream = stream; vcChunks = [];
+    var mt = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    vcMediaRec = new MediaRecorder(stream, { mimeType: mt });
+    vcMediaRec.ondataavailable = function (e) { if (e.data && e.data.size > 0) vcChunks.push(e.data); };
+    vcMediaRec.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      vcAudioCleanup();
+      if (!vcChunks.length) { onDone(null); return; }
+      onDone(new Blob(vcChunks, { type: 'audio/webm' }));
+    };
+    vcMediaRec.start();
+    vcSilenceWatch(stream, vcStopRec);
+  }).catch(function (err) {
+    var n = err && err.name || '';
+    var m = { NotAllowedError: '麦克风权限被拒绝（请在系统设置里允许）',
+              NotFoundError: '未找到麦克风设备',
+              NotReadableError: '麦克风被其它应用占用' };
+    toast(m[n] || ('无法访问麦克风: ' + (err && err.message || n)), 'er');
+    onDone(null);
+  });
+}
+
 function vcListen() {
   if(!vcOn)return;
+
+  // ① 首选 Whisper API —— 免手循环在 Android WebView 上也能用
+  if (whisperCfg.key && whisperCfg.url && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    setVcSt('listening');
+    var iDiv = vcAddLine('user', '…');
+    vcRecordStart(function (blob) {
+      if (!vcOn) { if (iDiv) iDiv.remove(); return; }
+      if (!blob) { if (iDiv) iDiv.remove(); setVcSt('idle'); if (vcOn) setTimeout(vcListen, 600); return; }
+      setVcSt('thinking');
+      micBlobToWav(blob).then(function (wav) {
+        whisperUpload(wav || blob, function (text) {
+          if (!vcOn) { if (iDiv) iDiv.remove(); return; }
+          if (!text) {
+            if (iDiv) iDiv.remove(); setVcSt('idle');
+            if (vcOn) setTimeout(vcListen, 500);
+            return;
+          }
+          if (iDiv) iDiv.querySelector('.vclt').innerHTML = esc(text);
+          vcSend(text);
+        }, function (err) {
+          if (iDiv) iDiv.remove();
+          toast('Whisper 失败: ' + err.message, 'er');
+          setVcSt('idle');
+          if (vcOn) setTimeout(vcListen, 1200);
+        });
+      });
+    });
+    return;
+  }
+
+  // ② 兜底：浏览器 SpeechRecognition
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){toast('请使用 Chrome/Edge','er');vcOn=false;setVcSt('idle');return;}
+  if(!SR){toast('当前环境不支持语音录入','er');vcOn=false;setVcSt('idle');return;}
   var ok=location.protocol==='https:'||location.protocol==='file:'||location.hostname==='localhost'||location.hostname==='127.0.0.1';
   if(!ok){toast('语音识别需要 HTTPS','er');vcOn=false;setVcSt('idle');return;}
   if(vcRec){try{vcRec.stop();}catch(e){}}
@@ -2090,53 +2293,50 @@ function vcSpeak(text) {
 }
 
 // ★ VAD — AI 说话时在后台监听用户，一旦检测到语音立刻打断
-function startVAD(){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR||vcVAD)return; // 不支持或已在运行
-  try{
-    vcVAD=new SR();
-    vcVAD.lang='zh-CN';
-    vcVAD.continuous=false;
-    vcVAD.interimResults=true;
-    vcVAD.maxAlternatives=1;
-    var captured='';
-    vcVAD.onresult=function(e){
-      // 用户开口了 → 立刻打断AI
-      var txt='';
-      for(var i=0;i<e.results.length;i++)txt+=e.results[i][0].transcript;
-      captured=txt.trim();
-      if(captured&&vcSt==='speaking'){
-        // 打断TTS
-        if(window.speechSynthesis)window.speechSynthesis.cancel();
-        stopVAD();
-        // 短暂等待确保TTS已停，然后处理捕获的文字
-        setTimeout(function(){
-          if(captured){
-            // 已经有识别文字 → 直接用这段文字
-            var iDiv=vcAddLine('user',captured);
-            vcSend(captured);
-          }else{
-            // 没文字 → 重新监听
-            vcListen();
+// 用音量能量检测（不依赖浏览器 SpeechRecognition，Android WebView 同样可用）
+var vcVadStream = null, vcVadCtx = null, vcVadTimer = null, vcVadLoud = 0;
+
+function startVAD() {
+  if (vcVAD || vcVadTimer) return;                       // 已在运行
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    vcVadStream = stream;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      vcVadCtx = new AC();
+      var src = vcVadCtx.createMediaStreamSource(stream);
+      var an = vcVadCtx.createAnalyser();
+      an.fftSize = 1024;
+      src.connect(an);
+      var buf = new Uint8Array(an.fftSize);
+      vcVadLoud = 0;
+      vcVadTimer = setInterval(function () {
+        if (vcSt !== 'speaking' || !vcOn) return;
+        an.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) { var v = (buf[i] - 128) / 128; sum += v * v; }
+        var rms = Math.sqrt(sum / buf.length);
+        if (rms > 0.06) {
+          vcVadLoud++;
+          if (vcVadLoud >= 2) {                            // 连续 2 次（约 200ms）判定为开口
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+            stopVAD();
+            setTimeout(function () {
+              if (vcOn && vcSt !== 'listening') vcListen();
+            }, 150);
           }
-        },150);
-      }
-    };
-    vcVAD.onerror=function(e){
-      vcVAD=null;
-      // VAD 失败是正常的，不提示
-    };
-    vcVAD.onend=function(){
-      vcVAD=null;
-      // 如果还在 speaking 状态且 vcOn，重启 VAD
-      if(vcOn&&vcSt==='speaking')setTimeout(startVAD,200);
-    };
-    vcVAD.start();
-  }catch(err){vcVAD=null;}
+        } else { vcVadLoud = 0; }
+      }, 100);
+    } catch (e) { stopVAD(); }
+  }).catch(function () { /* 拿不到麦克风 → 无打断功能，循环照常 */ });
 }
 
-function stopVAD(){
-  if(vcVAD){try{vcVAD.stop();}catch(e){}vcVAD=null;}
+function stopVAD() {
+  if (vcVAD) { try { vcVAD.stop(); } catch (e) {} vcVAD = null; }
+  if (vcVadTimer) { clearInterval(vcVadTimer); vcVadTimer = null; }
+  if (vcVadCtx) { try { vcVadCtx.close(); } catch (e) {} vcVadCtx = null; }
+  if (vcVadStream) { try { vcVadStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} vcVadStream = null; }
+  vcVadLoud = 0;
 }
 
 function vcAddLine(role, text) {
@@ -3744,6 +3944,7 @@ function mobSelModel(k){
 function startTrans() {
   if (!TRANS_FAST.key) { toast('翻译引擎未配置 API Key','er'); return; }
   if (srMode==='whisper' && !whisperCfg.key) { toast('Whisper 未配置 API Key，已切回浏览器识别','er'); srMode='browser'; }
+  if (srMode==='whisper' && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) { toast('当前环境不支持录音，已切回浏览器识别','er'); srMode='browser'; }
   trCount=0;
   showSc('trans');
   document.getElementById('hbadge').textContent='中泰互译';
