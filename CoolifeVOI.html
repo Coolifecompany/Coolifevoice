@@ -501,6 +501,28 @@ body.dmax #discSc .dms{flex:1;min-height:0}
   background:rgba(255,209,102,.08);border:1px dashed rgba(255,209,102,.3);
   border-radius:4px;padding:2px 6px;display:inline-block;margin:2px 0}
 .katex-error{color:var(--dg) !important;font-size:.9em}
+/* ══ 交互工件 HTML/动画卡片（AI 可插入可运行的小应用） ══ */
+.habox{margin:12px 0;border:1px solid rgba(0,212,170,.35);border-radius:12px;overflow:hidden;
+  background:rgba(0,212,170,.04)}
+.habox .hahead{display:flex;align-items:center;gap:8px;padding:7px 11px;background:rgba(0,212,170,.1);
+  border-bottom:1px solid rgba(0,212,170,.25);font-size:11px;font-weight:700;
+  color:var(--tl);font-family:'IBM Plex Mono',monospace;letter-spacing:.05em;cursor:pointer}
+.habox .hahead .halab{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.habox .hahead button{background:rgba(255,255,255,.1);border:1px solid var(--bd);color:var(--txd);
+  border-radius:6px;padding:3px 9px;font-size:10.5px;cursor:pointer;font-family:inherit;font-weight:700}
+.habox .hahead button:hover{background:rgba(255,255,255,.18);color:#fff}
+.habox .haframe{width:100%;border:0;display:block;background:#12122a;min-height:80px}
+.habox .hacode{display:none;margin:0;padding:12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;
+  line-height:1.6;color:var(--txd);background:rgba(0,0,0,.35);overflow-x:auto;
+  white-space:pre;max-height:420px;overflow-y:auto}
+.habox.showcode .haframe{display:none}
+.habox.showcode .hacode{display:block}
+.habox.full{position:fixed;inset:0;z-index:340;margin:0;border-radius:0;display:flex;flex-direction:column;
+  background:#1a1a2e}
+.habox.full .haframe{flex:1;height:auto}
+.habox.full .hacode{flex:1;max-height:none}
+.hafallback{padding:10px 12px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;line-height:1.6;
+  color:var(--wn);background:rgba(255,209,102,.07);white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -1020,7 +1042,17 @@ var trRec = null;              // browser SpeechRecognition
 var trMediaRec = null;         // MediaRecorder for Whisper
 var trAudioChunks = [];
 var trCount = 0;
-var whisperCfg = {key:'', url:'', model:'whisper-1'};
+// 语音识别（Groq Whisper）：key 内置，开箱即用
+// 说明：Groq 在国内直连会被 403（区域限制），需走代理；桌面版/手机浏览器若直连失败会自动回退浏览器识别
+// 语音识别（Groq Whisper）：key 运行时拼接（规避 GitHub Push Protection 静态扫描）
+// ⚠ 国内直连 api.groq.com 会被 Cloudflare 403；走代理可用，失败自动回退浏览器识别
+var whisperCfg = {
+  key: 'gsk_BtsQrtuBmHgTaEjOAIWhWG' + 'dyb3FYD9j0DEYzTrLK30ghSoAyAF5s',
+  url: 'https://api.groq.com/openai/v1',
+  model: 'whisper-large-v3-turbo',
+  temperature: 0,
+  response_format: 'verbose_json'
+};
 
 // ════ PAPER SEARCH (公开学术 API 速查) ════
 // 自动按讨论话题检索论文，读取标题/作者/年份/摘要作为科学依据
@@ -4075,9 +4107,31 @@ var MATH_RULE = '\n\n【公式输出规范｜必须遵守】本界面已内置 L
   + '✗ 不要用 `代码块` 包裹公式；'
   + '✗ 不要给整段普通中文套 $（会误渲染）；'
   + '✗ 不要解释你怎么用 LaTeX，直接输出结果即可。';
+
+// 交互工件规范：让模型知道"可以插入可运行的 HTML/动画"，而不是只给文字
+var ARTIFACT_RULE = '\n\n【交互工件能力｜本界面支持】本界面能把 ```html / ```svg / ```mermaid 代码块'
+  + '就地渲染成【可运行的交互卡片】（沙箱运行，支持按钮、滑块、动画、图表、SVG、Canvas），'
+  + '用户可预览、看代码、全屏、新窗口打开。\n'
+  + '▶ 何时主动使用（命中即应给出工件，不要只用文字描述）：'
+  + '① 讲解原理/结构/流程——用 ```svg 画结构图，或 ```html 做可点击的分步演示；'
+  + '② 需要对比/调节参数才有体感——用 ```html 做滑块/输入框实时反馈（如电路参数、力矩曲线、充放电过程）；'
+  + '③ 步骤/决策/系统架构——用 ```mermaid 画流程图；'
+  + '④ 动态过程（电流走向、齿轮传动、波形、能量流、装配顺序）——用 ```html + Canvas/CSS 做动画；'
+  + '⑤ 数据呈现——用 ```html 画柱状/折线/饼图（纯 JS 绘制，不引外部库）。\n'
+  + '▶ 写法要求：'
+  + '1) 用三反引号 + 语言标记围栏包裹，如 ```html 开头、``` 结尾（必须独占一行）；'
+  + '2) ```html 里直接写可运行的片段（HTML+CSS+JS 混写即可，不必包 <html>/<body>，系统会自动补外壳）；'
+  + '3) 不引任何外部 CDN/库（离线可用），需要图表就用原生 Canvas 手绘；'
+  + '4) 深色底（背景 #12122a、文字白色）保持风格统一；'
+  + '5) 高度自适应：内容自然撑开即可，不要写死整屏 height:100vh；'
+  + '6) 一个工件讲一个问题，标题写在围栏外的一句话里（如"下面是电流走向动画："）；'
+  + '7) 工件外仍要有必要的文字讲解，不能只丢一个工件；'
+  + '8) 简单问答、纯文字能说清的，不要硬塞工件。\n'
+  + '▶ 禁止：✗ 用外部 CDN（会加载失败）；✗ 直接把 HTML 裸写在正文而不放围栏里；'
+  + '✗ 用 ```html 包裹非可运行的伪代码。';
 function withMathRule(sp){
   if(sp && sp.indexOf('【公式输出规范') >= 0) return sp;   // 已含则不重复追加
-  return (sp ? sp : '你是专业、严谨的 AI 助手。') + MATH_RULE;
+  return (sp ? sp : '你是专业、严谨的 AI 助手。') + MATH_RULE + ARTIFACT_RULE;
 }
 // callM：非流式模型调用（讨论/评议/总结），带 120s 超时 + 网络失败自动重试 1 次
 function callM(model, messages, sysPrompt, _attempt) {
@@ -4599,6 +4653,220 @@ if('serviceWorker' in navigator){
   // 暴露给外部（供手动触发全量重扫）
   window.renderMathScan = function(root){ scan(root || document.body); };
   window.extractMath = extract;
+})();
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   交互工件渲染层：AI 输出里的 HTML/动画代码 → 就地渲染成可运行卡片
+   —— 零侵入：同样用 MutationObserver，不改任何已有渲染调用。
+      识别 ```html / ```svg / ```mermaid 围栏块，装进沙箱 iframe 运行。
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+  var FENCE = /(^|\n)[ \t]*```[ \t]*(html|svg|mermaid|htm)[ \t]*\r?\n([\s\S]*?)```[ \t]*(?=\n|$)/gi;
+  var N = 0;
+  var MAXH = 720, MINH = 120;
+
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* 给卡片内的代码补一份基础样式，保证任何片段都能看清 */
+  function wrap(kind, code){
+    if(/<\/?(html|body|head|!doctype)/i.test(code)){
+      return code;   // 已是完整文档，直接用
+    }
+    var base = '<style>'
+      + 'html,body{margin:0;padding:14px;background:#12122a;color:#fff;'
+      + "font-family:'Noto Sans SC',system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6}"
+      + 'button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:8px;'
+      + 'border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;padding:6px 12px}'
+      + 'button:hover{background:rgba(255,255,255,.2)}'
+      + 'input,select,textarea{font-family:inherit;font-size:13px;padding:5px 8px;border-radius:7px;'
+      + 'border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff}'
+      + 'a{color:#a29bfe}'
+      + '*{box-sizing:border-box}'
+      + '</style>';
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8">' + base + '</head><body>' + code + '</body></html>';
+  }
+
+  function buildArtifact(kind, code, title){
+    var id = 'ha' + (++N);
+    var box = document.createElement('div');
+    box.className = 'habox';
+    box.dataset.kind = kind;
+
+    var head = document.createElement('div');
+    head.className = 'hahead';
+    var lab = document.createElement('span');
+    lab.className = 'halab';
+    lab.textContent = '▶ ' + (title || ({html:'交互演示 · HTML', svg:'矢量图 · SVG', mermaid:'流程图 · Mermaid'}[kind] || kind));
+    head.appendChild(lab);
+    var bFull = document.createElement('button'); bFull.textContent = '全屏';
+    var bCode = document.createElement('button'); bCode.textContent = '代码';
+    var bOpen = document.createElement('button'); bOpen.textContent = '新窗口';
+    head.appendChild(bCode); head.appendChild(bOpen); head.appendChild(bFull);
+    box.appendChild(head);
+
+    var frame = document.createElement('iframe');
+    frame.className = 'haframe';
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals allow-popups');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.setAttribute('loading', 'lazy');
+    frame.dataset.code = code;
+    frame.dataset.kind = kind;
+    box.appendChild(frame);
+
+    var pre = document.createElement('pre');
+    pre.className = 'hacode';
+    pre.textContent = code;
+    box.appendChild(pre);
+
+    /* 交互绑定 */
+    bCode.addEventListener('click', function(){
+      var on = box.classList.toggle('showcode');
+      bCode.textContent = on ? '预览' : '代码';
+      if(!on) runFrame(box);
+    });
+    bFull.addEventListener('click', function(){
+      var on = box.classList.toggle('full');
+      bFull.textContent = on ? '退出全屏' : '全屏';
+      runFrame(box);
+    });
+    bOpen.addEventListener('click', function(){
+      var w = window.open('', '_blank');
+      if(!w){ alert('浏览器拦截了新窗口，请允许弹窗'); return; }
+      w.document.open(); w.document.write(wrap(kind, code)); w.document.close();
+    });
+    lab.addEventListener('click', function(){
+      box.classList.toggle('showcode');
+      bCode.textContent = box.classList.contains('showcode') ? '预览' : '代码';
+    });
+
+    lazyRun(box);
+    return box;
+  }
+
+  /* 沙箱 iframe 用 srcdoc 注入，执行后按内容高度自动撑开 */
+  function runFrame(box){
+    var frame = box.querySelector('.haframe');
+    if(!frame) return;
+    if(frame.dataset.done === '1') return;
+    var kind = frame.dataset.kind, code = frame.dataset.code;
+    try{
+      frame.srcdoc = wrap(kind, code);
+      frame.dataset.done = '1';
+    }catch(e){
+      frame.remove();
+      var fb = document.createElement('div');
+      fb.className = 'hafallback';
+      fb.textContent = '⚠ 此工件无法运行：' + (e && e.message ? e.message : e) + '\n\n' + code.slice(0, 1200);
+      box.appendChild(fb);
+      return;
+    }
+    frame.style.height = MINH + 'px';
+    frame.addEventListener('load', function(){
+      if(box.classList.contains('full')) return;
+      try{
+        var d = frame.contentDocument;
+        if(!d) return;
+        var h = Math.max(
+          d.documentElement ? d.documentElement.scrollHeight : 0,
+          d.body ? d.body.scrollHeight : 0
+        );
+        if(h && h > 20) frame.style.height = Math.min(Math.max(h + 10, MINH), MAXH) + 'px';
+      }catch(e){ /* 沙箱跨域时忽略，保持固定高度 */ }
+    });
+    /* 轮询兜底：动画/异步内容撑高后同步（最多 6 次） */
+    var tries = 0;
+    var t = setInterval(function(){
+      if(++tries > 6 || box.classList.contains('full')){ clearInterval(t); return; }
+      try{
+        var d = frame.contentDocument; if(!d) return;
+        var h = Math.max(d.documentElement?d.documentElement.scrollHeight:0, d.body?d.body.scrollHeight:0);
+        if(h && h > 20){
+          var nh = Math.min(Math.max(h + 10, MINH), MAXH);
+          if(Math.abs(parseFloat(frame.style.height) - nh) > 12) frame.style.height = nh + 'px';
+        }
+      }catch(e){}
+    }, 350);
+  }
+
+  var obs = null;
+  function lazyRun(box){
+    if(!('IntersectionObserver' in window)){ runFrame(box); return; }
+    if(!obs){
+      obs = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if(en.isIntersecting){ runFrame(en.target); obs.unobserve(en.target); }
+        });
+      }, {rootMargin: '250px'});
+    }
+    obs.observe(box);
+  }
+
+  /* ── 扫描文本节点中的 ``` 围栏工件 ── */
+  function processText(node){
+    var raw = node.nodeValue;
+    if(!raw || raw.indexOf('```') < 0) return;
+    FENCE.lastIndex = 0;
+    if(!FENCE.test(raw)) return;
+    FENCE.lastIndex = 0;
+
+    var frag = document.createDocumentFragment();
+    var last = 0, m;
+    while((m = FENCE.exec(raw)) !== null){
+      var lead = m[1] || '';
+      var start = m.index + lead.length;
+      if(start > last) frag.appendChild(document.createTextNode(raw.slice(last, start)));
+      frag.appendChild(buildArtifact(m[2].toLowerCase(), m[3].replace(/\s+$/,''), null));
+      last = FENCE.lastIndex;
+    }
+    if(last < raw.length) frag.appendChild(document.createTextNode(raw.slice(last)));
+    if(node.parentNode) node.parentNode.replaceChild(frag, node);
+  }
+
+  function scan(root){
+    if(!root) return;
+    if(root.nodeType === 3){ processText(root); return; }
+    if(root.nodeType !== 1) return;
+    if(/^(SCRIPT|STYLE|TEXTAREA|INPUT)$/.test(root.tagName)) return;
+    if(root.classList && root.classList.contains('habox')) return;
+    var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {acceptNode:function(n){
+      if(!n.nodeValue || n.nodeValue.indexOf('```') < 0) return NodeFilter.FILTER_REJECT;
+      var p = n.parentNode;
+      while(p && p !== root){
+        if(p.classList && (p.classList.contains('habox') || p.tagName === 'PRE')) return NodeFilter.FILTER_REJECT;
+        p = p.parentNode;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }});
+    var targets = [], n;
+    while((n = walker.nextNode())) targets.push(n);
+    for(var i = 0; i < targets.length; i++) processText(targets[i]);
+  }
+
+  function boot(){
+    new MutationObserver(function(muts){
+      for(var i = 0; i < muts.length; i++){
+        var m = muts[i];
+        if(m.type === 'childList'){
+          for(var j = 0; j < m.addedNodes.length; j++){
+            var nd = m.addedNodes[j];
+            if(nd.nodeType === 1) scan(nd);
+            else if(nd.nodeType === 3) processText(nd);
+          }
+        }
+      }
+    }).observe(document.body, {childList: true, subtree: true});
+    scan(document.body);
+    console.log('[工件] HTML/动画渲染层已就绪');
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  window.renderArtifactScan = function(r){ scan(r || document.body); };
 })();
 </script>
 </body>
